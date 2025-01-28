@@ -1,3 +1,29 @@
+```sql
+SELECT 
+    e.ID AS exception_id,
+    e.CREATED AS exception_created,
+    e.EXCEPTION AS exception_blob,
+    tl.ID AS test_launch_id,
+    tl.CREATED AS test_launch_created,
+    tr.ID AS test_run_id,
+    tr.STATUS AS test_run_status
+FROM 
+    QAPORTAL.TEST_LAUNCH tl
+JOIN 
+    QAPORTAL.APPLICATION a ON tl.APP_ID = a.ID
+JOIN 
+    QAPORTAL.ENVIRONMENTS env ON tl.ENV_ID = env.ID
+JOIN 
+    QAPORTAL.TEST_RUN tr ON tl.ID = tr.TEST_LAUNCH_ID
+JOIN 
+    QAPORTAL.EXCEPTION e ON tr.EXCEPTION_ID = e.ID
+WHERE 
+    a.NAME = :application_name
+    AND env.NAME = :environment_name
+    AND tl.REGRESSION = 1
+    AND tl.CREATED >= ADD_MONTHS(SYSDATE, -3);
+```
+
 # CSV Parser
 
 ## Overview
