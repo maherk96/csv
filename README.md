@@ -1,18 +1,32 @@
 ```sql
 SELECT 
-    e.ID AS exception_id,
-    e.CREATED AS exception_created,
-    e.EXCEPTION AS exception_blob,
-    tl.ID AS test_launch_id,
+    a.NAME AS application_name,
+    env.NAME AS environment_name,
+    tl.LAUNCH_ID AS test_launch_id,
     tl.CREATED AS test_launch_created,
-    tr.ID AS test_run_id,
-    tr.STATUS AS test_run_status
+    tl.GIT_BRANCH AS git_branch,
+    tl.JDK_VERSION AS jdk_version,
+    tl.OS_VERSION AS os_version,
+    tc.DISPLAY_NAME AS test_class_display_name,
+    tc.NAME AS test_class_name,
+    t.DISPLAY_NAME AS test_display_name,
+    t.METHOD_NAME AS test_method_name,
+    tr.STATUS AS test_run_status,
+    tr.START_TIME AS test_run_start_time,
+    tr.END_TIME AS test_run_end_time,
+    e.CREATED AS exception_created,
+    -- Convert BLOB to VARCHAR2 assuming the exception message is stored as text
+    UTL_RAW.CAST_TO_VARCHAR2(DBMS_LOB.SUBSTR(e.EXCEPTION, 4000, 1)) AS exception_message
 FROM 
     QAPORTAL.TEST_LAUNCH tl
 JOIN 
     QAPORTAL.APPLICATION a ON tl.APP_ID = a.ID
 JOIN 
     QAPORTAL.ENVIRONMENTS env ON tl.ENV_ID = env.ID
+JOIN 
+    QAPORTAL.TEST_CLASS tc ON tl.TEST_CLASS_ID = tc.ID
+JOIN 
+    QAPORTAL.TEST t ON tr.TEST_ID = t.ID
 JOIN 
     QAPORTAL.TEST_RUN tr ON tl.ID = tr.TEST_LAUNCH_ID
 JOIN 
