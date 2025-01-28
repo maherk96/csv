@@ -1,512 +1,204 @@
-```sql
-SELECT 
-    a.NAME AS application_name,
-    env.NAME AS environment_name,
-    tl.LAUNCH_ID AS test_launch_id,
-    tl.CREATED AS test_launch_created,
-    tl.GIT_BRANCH AS git_branch,
-    tl.JDK_VERSION AS jdk_version,
-    tl.OS_VERSION AS os_version,
-    tc.DISPLAY_NAME AS test_class_display_name,
-    tc.NAME AS test_class_name,
-    t.DISPLAY_NAME AS test_display_name,
-    t.METHOD_NAME AS test_method_name,
-    tr.STATUS AS test_run_status,
-    tr.START_TIME AS test_run_start_time,
-    tr.END_TIME AS test_run_end_time,
-    e.CREATED AS exception_created,
-    -- Convert BLOB to VARCHAR2 assuming the exception message is stored as text
-    UTL_RAW.CAST_TO_VARCHAR2(DBMS_LOB.SUBSTR(e.EXCEPTION, 4000, 1)) AS exception_message
-FROM 
-    QAPORTAL.TEST_LAUNCH tl
-JOIN 
-    QAPORTAL.APPLICATION a ON tl.APP_ID = a.ID
-JOIN 
-    QAPORTAL.ENVIRONMENTS env ON tl.ENV_ID = env.ID
-JOIN 
-    QAPORTAL.TEST_CLASS tc ON tl.TEST_CLASS_ID = tc.ID
-JOIN 
-    QAPORTAL.TEST_RUN tr ON tl.ID = tr.TEST_LAUNCH_ID
-JOIN 
-    QAPORTAL.TEST t ON tr.TEST_ID = t.ID
-JOIN 
-    QAPORTAL.EXCEPTION e ON tr.EXCEPTION_ID = e.ID
-WHERE 
-    a.NAME = :application_name
-    AND env.NAME = :environment_name
-    AND tl.REGRESSION = 1
-    AND tl.CREATED >= ADD_MONTHS(SYSDATE, -3);
-```
-
-# CSV Parser
-
-## Overview
-This project provides a robust and flexible CSV parsing library for Java. It allows converting CSV files into Java objects with various configurable options like custom delimiters, header mappings, error handling strategies, and support for built-in or custom type converters.
-
----
-
-## Features
-- Parse CSV files into Java objects.
-- Support for custom delimiters (e.g., `,`, `|`, etc.).
-- Flexible header-to-field mapping for case-insensitivity or custom column mapping.
-- Options to:
-    - Skip empty lines.
-    - Trim whitespace from fields.
-    - Handle unknown columns.
-- Error handling strategies:
-    - Continue on error.
-    - Halt on error.
-    - Collect errors.
-- Built-in type converters for common data types.
-- Support for custom type converters for complex or user-defined types.
-
----
-
-## Usage
-
-### Example CSV File
-```csv
-currency pair,bid low price,bid upper price,offer low price,offer upper price,num. of rungs bid,num. of rungs offer
-EUR/USD,1.1,1.2,1.3,1.4,5,6
-GBP/USD,1.5,1.6,1.7,1.8,7,8
-```
-
-### Parsing CSV to Java Objects
 ```java
-CSVParserConfig<CurrencyPair> config = new CSVParserConfig.Builder<>(CurrencyPair.class)
-    .withDelimiter(",") // Specify delimiter
-    .withTrimFields(true) // Trim fields
-    .withHeaderMapping(Map.of(
-        "currency pair", "currencyPair",
-        "bid low price", "bidLowPrice",
-        "bid upper price", "bidUpperPrice",
-        "offer low price", "offerLowPrice",
-        "offer upper price", "offerUpperPrice",
-        "num. of rungs bid", "numOfRungsBid",
-        "num. of rungs offer", "numOfRungsOffer"
-    ))
-    .build();
+package com.example.qaportal.model;
 
-List<CurrencyPair> currencyPairs = CSVParser.parse(csvFile, config);
-```
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
----
-
-## Configuration Options
-
-### Delimiters
-- **Default**: `,`
-- Use a custom delimiter when your CSV file uses a non-standard character like `|` or `;`.
-  ```java
-  config.withDelimiter("|");
-  ```
-
-### Trimming Fields
-- **Default**: `true`
-- Enable trimming to remove extra spaces around field values:
-  ```java
-  config.withTrimFields(true);
-  ```
-
-### Skip Empty Lines
-- **Default**: `true`
-- Skip blank rows in the CSV file:
-  ```java
-  config.withSkipEmptyLines(true);
-  ```
-
-### Ignore Unknown Columns
-- **Default**: `false`
-- Use when your CSV has extra columns not mapped to fields in the target class:
-  ```java
-  config.withIgnoreUnknownColumns(true);
-  ```
-
-### Error Handling Strategies
-1. **CONTINUE_ON_ERROR**: Logs errors and skips problematic rows.
-   ```java
-   config.withErrorHandlingStrategy(CSVParserConfig.ErrorHandlingStrategy.CONTINUE_ON_ERROR);
-   ```
-2. **HALT_ON_ERROR**: Stops parsing immediately upon encountering an error.
-   ```java
-   config.withErrorHandlingStrategy(CSVParserConfig.ErrorHandlingStrategy.HALT_ON_ERROR);
-   ```
-3. **COLLECT_ERRORS**: Collects all errors and logs them at the end.
-   ```java
-   config.withErrorHandlingStrategy(CSVParserConfig.ErrorHandlingStrategy.COLLECT_ERRORS);
-   ```
-
----
-
-## Type Conversion
-
-### Built-in Converters
-The library supports the following data types by default:
-- **Primitive types**: `int`, `double`, `boolean`, etc.
-- **Wrapper types**: `Integer`, `Double`, `Boolean`, etc.
-- **Common classes**: `String`, `BigDecimal`, `LocalDate`, `LocalDateTime`
-
-### Custom Converters
-Use a custom converter for:
-- Custom or user-defined types.
-- Complex transformations like parsing custom date formats or converting text into objects.
-
-Example:
-```java
-TypeConverter.registerConverter(MyCustomType.class, MyCustomType::fromString);
-
-CSVParserConfig<MyCustomType> config = new CSVParserConfig.Builder<>(MyCustomType.class).build();
-```
-
----
-
-## Advanced Usage
-
-### Parsing a CSV with Custom Delimiter
-```java
-CSVParserConfig<CurrencyPair> config = new CSVParserConfig.Builder<>(CurrencyPair.class)
-    .withDelimiter("|") // Use '|' as the delimiter
-    .build();
-
-List<CurrencyPair> currencyPairs = CSVParser.parse(customDelimiterFile, config);
-```
-
-### Handling Empty Lines
-```java
-CSVParserConfig<CurrencyPair> config = new CSVParserConfig.Builder<>(CurrencyPair.class)
-    .withSkipEmptyLines(true) // Ignore empty rows
-    .build();
-```
-
-### Custom Header Mapping
-Map CSV headers to Java fields:
-```java
-config.withHeaderMapping(Map.of(
-    "currency pair", "currencyPair",
-    "bid low price", "bidLowPrice"
-));
-```
-
-
-
-
-
-
-
-
-```java
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
-import org.mockito.Mock;
-import org.springframework.messaging.simp.stomp.*;
-import org.springframework.web.socket.messaging.WebSocketStompClient;
-
-import java.time.Duration;
+import java.time.LocalDate;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
-import static org.mockito.Mockito.*;
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class AssociatedTest {
+    private String testClassName;
+    private String testMethodName;
+    private String testDisplayName;
+    private long failureCount;
+    private LocalDate firstOccurred;
+    private LocalDate lastOccurred;
+    private List<LocalDate> occurrenceDates;
+}
 
-@DisplayName("StompClient Tests")
-class StompClientTest {
+package com.example.qaportal.model;
 
-    private static final String WEBSOCKET_URI = "ws://localhost:8080/websocket";
-    private static final String TEST_TOPIC = "/topic/test";
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-    @Mock
-    private StompSession mockStompSession;
-    
-    @Mock
-    private StompClient.MessageHandler mockMessageHandler;
-    
-    @Mock
-    private StompClient.StompConnectionStateListener mockStateListener;
-    
-    @Mock
-    private WebSocketStompClient mockWebSocketStompClient;
+import java.time.LocalDate;
+import java.util.List;
 
-    @Captor
-    private ArgumentCaptor<StompFrameHandler> frameHandlerCaptor;
-    
-    @Captor
-    private ArgumentCaptor<String> topicCaptor;
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class CommonFailure {
+    private String exceptionMessage;
+    private long failureCount;
+    private LocalDate firstOccurred;
+    private LocalDate lastOccurred;
+    private List<LocalDate> occurrenceDates;
+    private List<AssociatedTest> associatedTests; // New Field
+}
 
-    private StompClient stompClient;
-    private CompletableFuture<StompSession> sessionFuture;
+package com.example.qaportal.model;
 
-    @BeforeEach
-    void setUp() {
-        sessionFuture = new CompletableFuture<>();
-        given(mockStompSession.isConnected()).willReturn(true);
-        
-        stompClient = new StompClient.Builder()
-            .websocketUri(WEBSOCKET_URI)
-            .addTopic(TEST_TOPIC)
-            .messageHandler(mockMessageHandler)
-            .connectionStateListener(mockStateListener)
-            .build();
-    }
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-    @Nested
-    @DisplayName("Connection Tests")
-    class ConnectionTests {
-        
-        @Test
-        @DisplayName("Should connect successfully")
-        void shouldConnectSuccessfully() throws ExecutionException, InterruptedException, TimeoutException {
-            // Arrange
-            sessionFuture.complete(mockStompSession);
-            given(mockWebSocketStompClient.connectAsync(eq(WEBSOCKET_URI), any(StompSessionHandler.class)))
-                .willReturn(sessionFuture);
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 
-            // Act
-            CompletableFuture<Void> connectFuture = stompClient.connectAsync();
-            connectFuture.get(5, TimeUnit.SECONDS);
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class FailureReport {
+    private LocalDateTime reportGeneratedAt;
+    private TimeFrame timeFrame;
+    private List<CommonFailure> mostCommonFailures;
+}
 
-            // Assert
-            then(mockStateListener).should().onConnected();
-            assertTrue(stompClient.isConnected());
-        }
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+class TimeFrame {
+    private LocalDate startDate;
+    private LocalDate endDate;
+}
 
-        @Test
-        @DisplayName("Should handle connection failure")
-        void shouldHandleConnectionFailure() {
-            // Arrange
-            RuntimeException testException = new RuntimeException("Connection failed");
-            sessionFuture.completeExceptionally(testException);
-            given(mockWebSocketStompClient.connectAsync(eq(WEBSOCKET_URI), any(StompSessionHandler.class)))
-                .willReturn(sessionFuture);
+package com.example.qaportal.service;
 
-            // Act
-            CompletableFuture<Void> connectFuture = stompClient.connectAsync();
+import com.example.qaportal.model.AssociatedTest;
+import com.example.qaportal.model.CommonFailure;
+import com.example.qaportal.model.FailureReport;
+import com.example.qaportal.model.RegressionTestFailure;
+import com.example.qaportal.model.TimeFrame;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
 
-            // Assert
-            then(mockStateListener).should(timeout(5000)).onReconnecting(1);
-        }
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
 
-        @Test
-        @DisplayName("Should timeout on slow connection")
-        void shouldTimeoutOnSlowConnection() {
-            // Arrange
-            given(mockWebSocketStompClient.connectAsync(any(), any()))
-                .willReturn(new CompletableFuture<>()); // Never completes
+@Service
+public class FailureReportService {
 
-            // Act & Assert
-            assertTimeout(Duration.ofSeconds(2), () -> {
-                CompletableFuture<Void> future = stompClient.connectAsync();
-                // Don't wait for the future to complete
-            });
-        }
-    }
+    /**
+     * Generates a failure report based on the provided test failures.
+     *
+     * @param failures    List of RegressionTestFailure records.
+     * @param reportStart Start date of the report period.
+     * @param reportEnd   End date of the report period.
+     * @param topN        Number of top common failures to include.
+     * @return FailureReport object containing aggregated data.
+     */
+    @Cacheable(value = "failureReports", key = "#applicationName + '-' + #environmentName + '-' + #reportStart + '-' + #reportEnd + '-' + #topN")
+    public FailureReport generateFailureReport(List<RegressionTestFailure> failures, LocalDate reportStart, LocalDate reportEnd, int topN) {
+        // Filter failures within the specified time frame
+        List<RegressionTestFailure> filteredFailures = failures.stream()
+                .filter(failure -> {
+                    LocalDate failureDate = failure.getExceptionCreated().toLocalDate();
+                    return (failureDate.isEqual(reportStart) || failureDate.isAfter(reportStart)) &&
+                           (failureDate.isEqual(reportEnd) || failureDate.isBefore(reportEnd));
+                })
+                .collect(Collectors.toList());
 
-    @Nested
-    @DisplayName("Message Handling Tests")
-    class MessageHandlingTests {
-        
-        @Test
-        @DisplayName("Should handle message correctly")
-        void shouldHandleMessageCorrectly() {
-            // Arrange
-            String payload = "Test message";
-            StompHeaders headers = new StompHeaders();
-            headers.setDestination(TEST_TOPIC);
+        // Group failures by exception message
+        Map<String, List<RegressionTestFailure>> groupedFailures = filteredFailures.stream()
+                .collect(Collectors.groupingBy(RegressionTestFailure::getExceptionMessage));
 
-            // Act
-            stompClient.handleFrame(headers, payload);
+        // Create list of CommonFailure objects
+        List<CommonFailure> commonFailures = groupedFailures.entrySet().stream()
+                .map(entry -> {
+                    String exceptionMessage = entry.getKey();
+                    List<RegressionTestFailure> exceptionFailures = entry.getValue();
 
-            // Assert
-            then(mockMessageHandler).should().handleMessage(TEST_TOPIC, payload);
-            then(mockMessageHandler).shouldHaveNoMoreInteractions();
-        }
+                    long count = exceptionFailures.size();
+                    LocalDate firstOccurred = exceptionFailures.stream()
+                            .map(failure -> failure.getExceptionCreated().toLocalDate())
+                            .min(LocalDate::compareTo)
+                            .orElse(null);
+                    LocalDate lastOccurred = exceptionFailures.stream()
+                            .map(failure -> failure.getExceptionCreated().toLocalDate())
+                            .max(LocalDate::compareTo)
+                            .orElse(null);
+                    List<LocalDate> occurrenceDates = exceptionFailures.stream()
+                            .map(failure -> failure.getExceptionCreated().toLocalDate())
+                            .distinct()
+                            .sorted()
+                            .collect(Collectors.toList());
 
-        @Test
-        @DisplayName("Should handle message handler exception")
-        void shouldHandleMessageHandlerException() {
-            // Arrange
-            String payload = "Test message";
-            willThrow(new RuntimeException("Handler error"))
-                .given(mockMessageHandler)
-                .handleMessage(any(), any());
+                    // Further group by test details
+                    Map<String, List<RegressionTestFailure>> groupedByTest = exceptionFailures.stream()
+                            .collect(Collectors.groupingBy(failure -> 
+                                failure.getTestClassName() + "|" +
+                                failure.getTestMethodName() + "|" +
+                                failure.getTestDisplayName()
+                            ));
 
-            // Act
-            stompClient.handleFrame(new StompHeaders(), payload);
+                    // Create list of AssociatedTest objects
+                    List<AssociatedTest> associatedTests = groupedByTest.entrySet().stream()
+                            .map(testEntry -> {
+                                String[] testDetails = testEntry.getKey().split("\\|");
+                                String testClassName = testDetails[0];
+                                String testMethodName = testDetails[1];
+                                String testDisplayName = testDetails[2];
+                                List<RegressionTestFailure> testFailures = testEntry.getValue();
 
-            // Assert
-            then(mockMessageHandler).should().handleMessage(any(), eq(payload));
-            then(mockStateListener).should(never()).onError(any());
-        }
-    }
+                                long testFailureCount = testFailures.size();
+                                LocalDate testFirstOccurred = testFailures.stream()
+                                        .map(failure -> failure.getExceptionCreated().toLocalDate())
+                                        .min(LocalDate::compareTo)
+                                        .orElse(null);
+                                LocalDate testLastOccurred = testFailures.stream()
+                                        .map(failure -> failure.getExceptionCreated().toLocalDate())
+                                        .max(LocalDate::compareTo)
+                                        .orElse(null);
+                                List<LocalDate> testOccurrenceDates = testFailures.stream()
+                                        .map(failure -> failure.getExceptionCreated().toLocalDate())
+                                        .distinct()
+                                        .sorted()
+                                        .collect(Collectors.toList());
 
-    @Nested
-    @DisplayName("Topic Management Tests")
-    class TopicManagementTests {
-        
-        @Test
-        @DisplayName("Should handle topic subscription")
-        void shouldHandleTopicSubscription() {
-            // Arrange
-            String newTopic = "/topic/new";
-            
-            // Act
-            stompClient.addTopic(newTopic);
+                                return new AssociatedTest(
+                                        testClassName,
+                                        testMethodName,
+                                        testDisplayName,
+                                        testFailureCount,
+                                        testFirstOccurred,
+                                        testLastOccurred,
+                                        testOccurrenceDates
+                                );
+                            })
+                            .collect(Collectors.toList());
 
-            // Assert
-            then(mockStompSession).should(times(2))
-                .subscribe(topicCaptor.capture(), frameHandlerCaptor.capture());
-            
-            List<String> capturedTopics = topicCaptor.getAllValues();
-            assertTrue(capturedTopics.contains(newTopic));
-        }
+                    return new CommonFailure(
+                            exceptionMessage,
+                            count,
+                            firstOccurred,
+                            lastOccurred,
+                            occurrenceDates,
+                            associatedTests
+                    );
+                })
+                // Sort by failureCount descending to get the most common failures first
+                .sorted(Comparator.comparingLong(CommonFailure::getFailureCount).reversed())
+                .limit(topN) // Limit to top N
+                .collect(Collectors.toList());
 
-        @Test
-        @DisplayName("Should handle topic unsubscription")
-        void shouldHandleTopicUnsubscription() {
-            // Act
-            stompClient.removeTopic(TEST_TOPIC);
+        // Assemble the FailureReport
+        FailureReport report = new FailureReport();
+        report.setReportGeneratedAt(LocalDateTime.now());
+        report.setTimeFrame(new TimeFrame(reportStart, reportEnd));
+        report.setMostCommonFailures(commonFailures);
 
-            // Assert
-            then(mockStateListener).should(never()).onError(any());
-        }
-    }
-
-    @Nested
-    @DisplayName("Error Handling Tests")
-    class ErrorHandlingTests {
-        
-        @Test
-        @DisplayName("Should attempt reconnection")
-        void shouldAttemptReconnection() {
-            // Arrange
-            RuntimeException testException = new RuntimeException("Transport error");
-
-            // Act
-            stompClient.handleTransportError(mockStompSession, testException);
-
-            // Assert
-            then(mockStateListener).should().onReconnecting(1);
-            then(mockStateListener).shouldHaveNoMoreInteractions();
-        }
-
-        @Test
-        @DisplayName("Should handle max reconnection attempts")
-        void shouldHandleMaxReconnectionAttempts() {
-            // Arrange
-            RuntimeException testException = new RuntimeException("Transport error");
-
-            // Act
-            for (int i = 0; i < 6; i++) {
-                stompClient.handleTransportError(mockStompSession, testException);
-            }
-
-            // Assert
-            then(mockStateListener).should().onConnectionFailed(any(RuntimeException.class));
-        }
-
-        @Test
-        @DisplayName("Should handle exceptions")
-        void shouldHandleExceptions() {
-            // Arrange
-            StompCommand command = StompCommand.SEND;
-            StompHeaders headers = new StompHeaders();
-            byte[] payload = "Test".getBytes();
-            RuntimeException testException = new RuntimeException("Test exception");
-
-            // Act
-            stompClient.handleException(mockStompSession, command, headers, payload, testException);
-
-            // Assert
-            then(mockStateListener).should().onError(testException);
-            then(mockStateListener).shouldHaveNoMoreInteractions();
-        }
-    }
-
-    @Nested
-    @DisplayName("Builder Validation Tests")
-    class BuilderValidationTests {
-        
-        @Test
-        @DisplayName("Should validate builder parameters")
-        void shouldValidateBuilderParameters() {
-            // Assert
-            assertAll(
-                () -> assertThrows(IllegalArgumentException.class, () -> 
-                    new StompClient.Builder().build(),
-                    "Should throw exception for empty builder"
-                ),
-                () -> assertThrows(IllegalArgumentException.class, () -> 
-                    new StompClient.Builder()
-                        .websocketUri(WEBSOCKET_URI)
-                        .build(),
-                    "Should throw exception for missing topic"
-                ),
-                () -> assertThrows(IllegalArgumentException.class, () -> 
-                    new StompClient.Builder()
-                        .websocketUri(WEBSOCKET_URI)
-                        .addTopic(TEST_TOPIC)
-                        .build(),
-                    "Should throw exception for missing message handler"
-                )
-            );
-        }
-    }
-
-    @Nested
-    @DisplayName("Concurrency Tests")
-    class ConcurrencyTests {
-        
-        @Test
-        @DisplayName("Should handle concurrent topic modification")
-        void shouldHandleConcurrentTopicModification() throws InterruptedException {
-            // Arrange
-            int threadCount = 10;
-            Thread[] threads = new Thread[threadCount];
-
-            // Act
-            for (int i = 0; i < threadCount; i++) {
-                final int threadNum = i;
-                threads[i] = new Thread(() -> {
-                    stompClient.addTopic("/topic/concurrent" + threadNum);
-                    stompClient.removeTopic("/topic/concurrent" + threadNum);
-                });
-                threads[i].start();
-            }
-
-            // Wait for all threads to complete
-            for (Thread thread : threads) {
-                thread.join();
-            }
-
-            // Assert
-            then(mockStateListener).should(never()).onError(any());
-        }
-    }
-
-    @Nested
-    @DisplayName("Lifecycle Tests")
-    class LifecycleTests {
-        
-        @Test
-        @DisplayName("Should handle disconnection")
-        void shouldHandleDisconnection() {
-            // Act
-            stompClient.disconnect();
-
-            // Assert
-            then(mockStateListener).should().onDisconnected();
-            assertFalse(stompClient.isConnected());
-        }
+        return report;
     }
 }
+
+
 ```
