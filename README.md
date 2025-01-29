@@ -1,97 +1,54 @@
 ```java
-package com.example.qaportal.model;
+DECLARE
+    CURSOR launch_cursor IS
+        SELECT ID
+        FROM QAPORTAL.TEST_LAUNCH
+        WHERE REGRESSION = 0; -- Only non-regression test launches
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+BEGIN
+    FOR record IN launch_cursor LOOP
+        -- Delete related STEP_RUN entries
+        DELETE FROM QAPORTAL.STEP_RUN
+        WHERE TEST_RUN_ID IN (
+            SELECT ID
+            FROM QAPORTAL.TEST_RUN
+            WHERE TEST_LAUNCH_ID = record.ID
+        );
 
-import java.time.LocalDate;
-import java.util.List;
+        -- Delete related TEST_RUN entries
+        DELETE FROM QAPORTAL.TEST_RUN
+        WHERE TEST_LAUNCH_ID = record.ID;
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class AssociatedTest {
-    private String testClassName;
-    private String testMethodName;
-    private String testDisplayName;
-    private long failureCount;
-    private LocalDate firstOccurred;
-    private LocalDate lastOccurred;
-    private List<LocalDate> occurrenceDates;
-}
+        -- Delete related TEST_PARAM entries
+        DELETE FROM QAPORTAL.TEST_PARAM
+        WHERE TEST_LAUNCH_ID = record.ID;
 
-package com.example.qaportal.model;
+        -- Delete related TEST_TAG entries
+        DELETE FROM QAPORTAL.TEST_TAG
+        WHERE TEST_LAUNCH_ID = record.ID;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+        -- Delete the TEST_LAUNCH entry itself
+        DELETE FROM QAPORTAL.TEST_LAUNCH
+        WHERE ID = record.ID;
+    END LOOP;
 
-import java.time.LocalDate;
-import java.util.List;
+    -- Cleanup FIX entries not associated with any TEST_RUN
+    DELETE FROM QAPORTAL.FIX
+    WHERE ID NOT IN (
+        SELECT DISTINCT FIX_ID
+        FROM QAPORTAL.TEST_RUN
+        WHERE FIX_ID IS NOT NULL
+    );
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class CommonFailure {
-    private String exceptionMessage;
-    private long failureCount;
-    private LocalDate firstOccurred;
-    private LocalDate lastOccurred;
-    private List<LocalDate> occurrenceDates;
-    private List<AssociatedTest> associatedTests; // New Field
-}
-
-package com.example.qaportal.model;
-
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class FailureReport {
-    private LocalDateTime reportGeneratedAt;
-    private TimeFrame timeFrame;
-    private List<CommonFailure> mostCommonFailures;
-}
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-class TimeFrame {
-    private LocalDate startDate;
-    private LocalDate endDate;
-}
-
-package com.example.qaportal.service;
-
-import com.example.qaportal.model.AssociatedTest;
-import com.example.qaportal.model.CommonFailure;
-import com.example.qaportal.model.FailureReport;
-import com.example.qaportal.model.RegressionTestFailure;
-import com.example.qaportal.model.TimeFrame;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.stream.Collectors;
-
-@Service
-public class FailureReportService {
-
-    /**
-     * Generates a failure report based on the provided test failures.
-     *
-     * @param failures    List of RegressionTestFailure records.
-     * @param reportStart Start date of the report period.
+    -- Cleanup LOG entries not associated with any TEST_RUN
+    DELETE FROM QAPORTAL.LOG
+    WHERE ID NOT IN (
+        SELECT DISTINCT LOG_ID
+        FROM QAPORTAL.TEST_RUN
+        WHERE LOG_ID IS NOT NULL
+    );
+END;
+t date of the report period.
      * @param reportEnd   End date of the report period.
      * @param topN        Number of top common failures to include.
      * @return FailureReport object containing aggregated data.
