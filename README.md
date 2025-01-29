@@ -1,3 +1,5 @@
+
+```sql
 DECLARE
     CURSOR launch_cursor IS
         SELECT ID
@@ -64,3 +66,4 @@ BEGIN
         WHERE EXCEPTION_ID IS NOT NULL
     );
 END;
+```
