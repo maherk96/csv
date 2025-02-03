@@ -1,69 +1,50 @@
 
-```sql
-DECLARE
-    CURSOR launch_cursor IS
-        SELECT ID
-        FROM QAPORTAL.TEST_LAUNCH
-        WHERE REGRESSION = 0; -- Only non-regression test launches
+```java
+private StringBuilder failureMessage(OrderTestData testData) {
+    StringBuilder builder = new StringBuilder();
+    List<ExecutionReport> list = getReports(testData.getClOrdID());
+    ExecutionReport lastEr = list.stream().reduce((first, second) -> second).orElse(null);
 
-BEGIN
-    FOR record IN launch_cursor LOOP
-        -- Delete related STEP_RUN entries
-        DELETE FROM QAPORTAL.STEP_RUN
-        WHERE TEST_RUN_ID IN (
-            SELECT ID
-            FROM QAPORTAL.TEST_RUN
-            WHERE TEST_LAUNCH_ID = record.ID
-        );
+    builder.append("\n--- Failure Details ---\n");
 
-        -- Delete related TEST_RUN entries
-        DELETE FROM QAPORTAL.TEST_RUN
-        WHERE TEST_LAUNCH_ID = record.ID;
+    if (lastEr != null) {
+        builder.append("Last Order Status: ").append(lastEr.getOrdStatus()).append("\n");
+        builder.append("Last Execution Type: ").append(lastEr.getExecType()).append("\n");
+        builder.append("Last Execution Report: ").append(lastEr).append("\n");
 
-        -- Delete related TEST_PARAM entries
-        DELETE FROM QAPORTAL.TEST_PARAM
-        WHERE TEST_LAUNCH_ID = record.ID;
+        // Check for pending replace
+        if (lastEr.getExecType().equals(ExecutionType.PENDING_REPLACE)) {
+            builder.append("Order Status: Pending Replace\n");
 
-        -- Delete related TEST_TAG entries
-        DELETE FROM QAPORTAL.TEST_TAG
-        WHERE TEST_LAUNCH_ID = record.ID;
+            // Check for a corresponding reject in the order cancel reject list
+            OrderCancelRejectReport rejectReport = orderCancelRejectList.stream()
+                .filter(reject -> reject.getClOrdID().equals(testData.getClOrdID()))
+                .findFirst()
+                .orElse(null);
 
-        -- Delete related EXCEPTION entries
-        DELETE FROM QAPORTAL.EXCEPTION
-        WHERE ID IN (
-            SELECT DISTINCT EXCEPTION_ID
-            FROM QAPORTAL.TEST_RUN
-            WHERE TEST_LAUNCH_ID = record.ID
-              AND EXCEPTION_ID IS NOT NULL
-        );
+            if (rejectReport != null) {
+                builder.append("Order Replace Rejected: ").append(rejectReport.getText()).append("\n");
+            }
+        }
 
-        -- Delete the TEST_LAUNCH entry itself
-        DELETE FROM QAPORTAL.TEST_LAUNCH
-        WHERE ID = record.ID;
-    END LOOP;
+        // Handle rejected case
+        if (lastEr.getExecType().equals(ExecutionType.REJECTED)) {
+            builder.append("Reason for Rejection: ").append(lastEr.getText()).append("\n");
+        }
+    } else {
+        List<ExecutionReport> origList = getReports(testData.getOrigClOrdID());
+        ExecutionReport origLastEr = origList.stream().reduce((first, second) -> second).orElse(null);
 
-    -- Cleanup FIX entries not associated with any TEST_RUN
-    DELETE FROM QAPORTAL.FIX
-    WHERE ID NOT IN (
-        SELECT DISTINCT FIX_ID
-        FROM QAPORTAL.TEST_RUN
-        WHERE FIX_ID IS NOT NULL
-    );
+        if (origLastEr != null) {
+            builder.append("Last Execution Report (Original Order): ").append(origLastEr).append("\n");
+            builder.append("Original Order Status: ").append(origLastEr.getOrdStatus()).append("\n");
+            builder.append("Original Execution Type: ").append(origLastEr.getExecType()).append("\n");
+        } else {
+            builder.append("No execution reports found for the order.\n");
+        }
+    }
 
-    -- Cleanup LOG entries not associated with any TEST_RUN
-    DELETE FROM QAPORTAL.LOG
-    WHERE ID NOT IN (
-        SELECT DISTINCT LOG_ID
-        FROM QAPORTAL.TEST_RUN
-        WHERE LOG_ID IS NOT NULL
-    );
-
-    -- Cleanup EXCEPTION entries not associated with any TEST_RUN
-    DELETE FROM QAPORTAL.EXCEPTION
-    WHERE ID NOT IN (
-        SELECT DISTINCT EXCEPTION_ID
-        FROM QAPORTAL.TEST_RUN
-        WHERE EXCEPTION_ID IS NOT NULL
-    );
-END;
+    builder.append("\n--- End of Details ---");
+    return builder;
+}
 ```
