@@ -1,23 +1,25 @@
 
 ```bash
-
-
 #!/bin/bash
 
-# Ensure a log file and order ID are provided
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <log_file> <order_id>"
+# Ensure an order ID is provided
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <order_id>"
     exit 1
 fi
 
-LOG_FILE="$1"
-ORDER_ID="$2"
+ORDER_ID="$1"
 
-# Check if the log file exists
-if [ ! -f "$LOG_FILE" ]; then
-    echo "Error: Log file '$LOG_FILE' not found."
+# Find the latest log file in the current directory
+LOG_FILE=$(ls -t *.log 2>/dev/null | head -n 1)
+
+# Check if a log file was found
+if [ -z "$LOG_FILE" ]; then
+    echo "Error: No log files found in the current directory."
     exit 1
 fi
+
+echo "Using latest log file: $LOG_FILE"
 
 # Grep the initial order ID to find related entries
 echo "Searching for entries related to order ID: $ORDER_ID..."
