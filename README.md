@@ -1,51 +1,124 @@
+```groovy
+ext.addJavaGenerator = { map ->
+    map.putIfAbsent("sourceSetName", "generator")
+    map.putIfAbsent("taskName", "runGenerator")
+    def generatorTaskName = map.taskName.toString()
 
-```bash
-#!/bin/bash
+    map.putIfAbsent("generatedSourcesSubDir", map.sourceSetName)
+    def generatorOutputDir = "$projectDir/build/generated/sources/" + map.generatedSourcesSubDir
+    map.putIfAbsent("generatorOutputDir", generatorOutputDir)
+    map.putIfAbsent("clearGeneratorOutputDirOnBuild", generatorOutputDir.startsWith("$projectDir/build/"))
+    map.putIfAbsent("addGeneratorOutputDirAsGeneratedSourceSetInput", true)
+    map.putIfAbsent("generatedSourceSetName", "main")
+    map.putIfAbsent("generatedJarTaskName", null)
+    map.putIfAbsent("generatedSourcesJarTaskName",
+        map.generatedSourceSetName == "main" ? "sourcesJar" : null
+    )
 
-# Ensure an order ID is provided
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <order_id> [log_directory]"
-    exit 1
-fi
+    def logHeader = "addJavaGenerator[$generatorTaskName]"
+    logger.info "$logHeader: map=$map"
 
-ORDER_ID="$1"
-LOG_DIR="${2:-.}" # Default to current directory if no log directory is provided
+    // 1) Add source sets
+    for (sourceSetName in [map.sourceSetName, map.generatedSourceSetName]) {
+        if (sourceSets.findByName(sourceSetName) == null) {
+            logger.info "$logHeader: adding source set: '$sourceSetName'"
+            sourceSets {
+                "$sourceSetName" {
+                    // You can do more config here if needed
+                }
+            }
+        }
+    }
 
-# Check if the directory exists
-if [ ! -d "$LOG_DIR" ]; then
-    echo "Error: Directory '$LOG_DIR' does not exist."
-    exit 1
-fi
+    def generatorSourceSet = sourceSets.findByName(map.sourceSetName)
+    def generatedSourceSet = sourceSets.findByName(map.generatedSourceSetName)
 
-# Find the latest log file in the specified directory
-LOG_FILE=$(ls -t "$LOG_DIR"/*.log 2>/dev/null | head -n 1)
+    // 2) Add the generator output dir to the generated source set inputs
+    if (map.addGeneratorOutputDirAsGeneratedSourceSetInput) {
+        logger.info "$logHeader: adding generator output dir to '${generatedSourceSet.name}'"
+        generatedSourceSet.java {
+            srcDirs += ["$generatorOutputDir/java"]
+        }
+        generatedSourceSet.resources {
+            srcDirs += ["$generatorOutputDir/resources"]
+        }
+    }
 
-# Check if a log file was found
-if [ -z "$LOG_FILE" ]; then
-    echo "Error: No log files found in directory '$LOG_DIR'."
-    exit 1
-fi
+    // 3) Register the runGenerator task
+    logger.info("$logHeader: adding task: '$generatorTaskName'")
+    tasks.register(generatorTaskName, JavaExec) {
 
-echo "Using latest log file: $LOG_FILE"
+        dependsOn generatorSourceSet.classesTaskName
 
-# Grep the initial order ID to find related entries
-echo "Searching for entries related to order ID: $ORDER_ID..."
+        classpath = generatorSourceSet.runtimeClasspath
 
-# Find linked IDs from lines containing the initial ID
-LINKED_IDS=$(grep "$ORDER_ID" "$LOG_FILE" | grep -Eo "(CQ[a-zA-Z0-9]+|DQ[a-zA-Z0-9]+)" | sort | uniq)
+        // For example, if you want to allow specifying these in map:
+        if (map.containsKey("mainClass")) {
+            mainClass = map.mainClass
+        }
+        if (map.containsKey("args")) {
+            args = map.args
+        }
+        if (map.containsKey("systemProperties")) {
+            systemProperties.putAll(map.systemProperties)
+        }
 
-# Add the original order ID to the list of IDs to search for
-ALL_IDS="$ORDER_ID"
-for ID in $LINKED_IDS; do
-    if [ "$ID" != "$ORDER_ID" ]; then
-        ALL_IDS="$ALL_IDS|$ID"
-    fi
-done
+        outputs.dir generatorOutputDir
+        outputs.cacheIf { true }
 
-# Search for all related log entries
-echo "Found related IDs: $LINKED_IDS"
-echo "Fetching all related log entries..."
-grep -E "($ALL_IDS)" "$LOG_FILE"
+        doFirst {
+            if (map.clearGeneratorOutputDirOnBuild) {
+                logger.info "$logHeader: deleting output directory: $generatorOutputDir"
+                delete generatorOutputDir
+            }
+        }
+    }
 
-exit 0
+    // 4) Wire runGenerator into the generated source set's compile and resources tasks
+    tasks.named(generatedSourceSet.compileJavaTaskName) {
+        dependsOn generatorTaskName
+    }
+    tasks.named(generatedSourceSet.processResourcesTaskName) {
+        dependsOn generatorTaskName
+    }
+
+    // 5) Add generated output to jar (if configured)
+    if (map.generatedJarTaskName != null) {
+        logger.info "$logHeader: adding generated classes to '${map.generatedJarTaskName}'"
+        tasks.named(map.generatedJarTaskName) {
+            from generatedSourceSet.output
+        }
+    }
+
+    // 6) Add generated sources to sourcesJar (if configured)
+    if (map.generatedSourcesJarTaskName != null) {
+        tasks.named(map.generatedSourcesJarTaskName) {
+            dependsOn generatorTaskName
+            if (map.generatedSourceSetName != "main") {
+                logger.info "$logHeader: adding generated sources to '${map.generatedSourcesJarTaskName}'"
+                from "$generatorOutputDir/java"
+                from "$generatorOutputDir/resources"
+            }
+        }
+    }
+}
+```
+
+```groovy
+apply from: "$rootDir/gradle/java-generator.gradle"
+
+addJavaGenerator(
+    taskName: "generateMessages",
+    mainClass: "com.citi.icg.ambrosia.annotation.processing.SbeToolGenerator",
+    args: [
+        "$projectDir/src/main/java/com/citi/fx/qa/mock/positionmanager/sbe",
+        "src/main/resources/position_manager_messages.xml"
+    ],
+    systemProperties: [
+        'sbe.output.dir': "$projectDir/src/main/java/com/citi/fx/qa/mock/positionmanager/sbe",
+        'sbe.target.language': 'Java',
+        'sbe.validation.stop.on.error': 'true',
+        'sbe.validation.xsd': 'src/main/resources/sbe.xsd'
+    ]
+)
 ```
