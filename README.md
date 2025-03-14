@@ -59,4 +59,48 @@ public class TestFeature {
     @CreationTimestamp
     private Instant created;
 }
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.Instant;
+import java.util.Set;
+
+@Entity
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@ToString
+public class TestStep {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @Column(nullable = false, updatable = false)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "test_id", nullable = false)
+    private Test test;  // Scenario it belongs to
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "feature_id", nullable = false)
+    private TestFeature testFeature;  // Direct relation to the feature
+
+    @Column(name = "step_name", length = 255, nullable = false)
+    private String stepName;
+
+    @Column(name = "status", length = 20, nullable = false)
+    private String status;  // PASSED, FAILED, SKIPPED, etc.
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "exception_id")
+    private ExceptionEntity exception;  // Links to the EXCEPTION table
+
+    @OneToMany(mappedBy = "testStep", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<TestStepData> stepData;  // Holds input values (data tables)
+
+    @CreationTimestamp
+    private Instant created;
+}
 ```
