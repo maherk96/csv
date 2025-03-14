@@ -103,4 +103,31 @@ public class TestStep {
     @CreationTimestamp
     private Instant created;
 }
+
+import jakarta.persistence.*;
+import lombok.*;
+
+@Entity
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@ToString
+public class TestStepData {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @Column(nullable = false, updatable = false)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)  // Each data entry belongs to a step
+    @JoinColumn(name = "test_step_id", nullable = false)
+    private TestStep testStep;
+
+    @Column(name = "key_name", length = 255, nullable = false)
+    private String key;  // Example: "quantity", "symbol"
+
+    @Column(name = "value", length = 255, nullable = false)
+    private String value;  // Example: "1000", "USD/CAD"
+}
 ```
