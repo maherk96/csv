@@ -16,7 +16,13 @@ public class ServiceRunner implements SmartLifecycle {
 
     private final Environment env;
     private final ExecutorService executorService = Executors.newFixedThreadPool(5);
+
+    // Tracks running service threads
     private final Map<String, Future<?>> runningServices = new ConcurrentHashMap<>();
+
+    // Tracks current status: "RUNNING" or "STOPPED"
+    private final Map<String, String> serviceStates = new ConcurrentHashMap<>();
+
     private volatile boolean running = false;
 
     private final List<String> services = List.of(
@@ -25,10 +31,12 @@ public class ServiceRunner implements SmartLifecycle {
 
     public ServiceRunner(Environment env) {
         this.env = env;
+        // Initialize all services as STOPPED
+        services.forEach(service -> serviceStates.put(service, "STOPPED"));
     }
 
     /**
-     * Called automatically by Spring when the application starts.
+     * Automatically called when Spring starts the application.
      */
     @Override
     public void start() {
@@ -49,27 +57,22 @@ public class ServiceRunner implements SmartLifecycle {
         Future<?> future = executorService.submit(() -> {
             try {
                 log.info("Starting service: {}", serviceName);
+                final var profile = env.getProperty("ambrosia.profile");
                 final var serviceEnvironment = ServiceEnvironment.newEnvironment()
-                    .withResources(env.getProperty("ambrosia.profile")).build();
+                    .withResources(profile).build();
+
+                // Simulate blocking service run (replace with real logic)
                 AmbrosiaConfig.run(serviceEnvironment, "services.yaml", serviceName);
-                log.info("Service '{}' is now running.", serviceName);
+                
+                log.info("Service '{}' is running.", serviceName);
             } catch (Exception e) {
                 log.error("Error starting service '{}'", serviceName, e);
             }
         });
 
         runningServices.put(serviceName, future);
-    }
-
-    /**
-     * Stops all services gracefully.
-     */
-    @Override
-    public void stop() {
-        log.info("Stopping all services...");
-        running = false;
-        runningServices.keySet().forEach(this::stopService);
-        shutdownExecutor();
+        serviceStates.put(serviceName, "RUNNING");
+        log.info("Service '{}' has been started.", serviceName);
     }
 
     /**
@@ -83,27 +86,55 @@ public class ServiceRunner implements SmartLifecycle {
         }
 
         future.cancel(true);
+        serviceStates.put(serviceName, "STOPPED");
         log.info("Service '{}' has been stopped.", serviceName);
     }
 
     /**
-     * Checks if the lifecycle component is running.
+     * Provides current status of all services.
      */
+    public Map<String, String> getServiceStatus() {
+        return new ConcurrentHashMap<>(serviceStates);
+    }
+
+    /**
+     * Gracefully stop all services when Spring shuts down.
+     */
+    @Override
+    public void stop() {
+        log.info("Stopping all services...");
+        running = false;
+        runningServices.keySet().forEach(this::stopService);
+        shutdownExecutor();
+        log.info("All services stopped.");
+    }
+
+    /**
+     * Stops services asynchronously (called by Spring).
+     */
+    @Override
+    public void stop(Runnable callback) {
+        stop();
+        callback.run();
+    }
+
     @Override
     public boolean isRunning() {
         return running;
     }
 
-    /**
-     * Ensures that this component starts automatically.
-     */
     @Override
     public boolean isAutoStartup() {
         return true;
     }
 
+    @Override
+    public int getPhase() {
+        return 0;
+    }
+
     /**
-     * Shutdown logic for the executor service.
+     * Gracefully shuts down the ExecutorService.
      */
     private void shutdownExecutor() {
         executorService.shutdown();
@@ -117,53 +148,5 @@ public class ServiceRunner implements SmartLifecycle {
             executorService.shutdownNow();
         }
     }
-
-    /**
-     * Stops services asynchronously with a callback.
-     */
-    @Override
-    public void stop(Runnable callback) {
-        stop();
-        callback.run();
-    }
-
-    /**
-     * Returns the phase for SmartLifecycle components.
-     */
-    @Override
-    public int getPhase() {
-        return 0;
-    }
 }
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
-
-@RestController
-@RequestMapping("/services")
-public class ServiceController {
-
-    @Autowired
-    private ServiceRunner serviceRunner;
-
-    @PostMapping("/start/{serviceName}")
-    public String startService(@PathVariable String serviceName) {
-        serviceRunner.startService(serviceName);
-        return "Service " + serviceName + " started.";
-    }
-
-    @PostMapping("/stop/{serviceName}")
-    public String stopService(@PathVariable String serviceName) {
-        serviceRunner.stopService(serviceName);
-        return "Service " + serviceName + " stopped.";
-    }
-
-    @GetMapping("/status")
-    public Map<String, Boolean> getServiceStatus() {
-        return serviceRunner.getServiceStatus();
-    }
-}
-
 ```
