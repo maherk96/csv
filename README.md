@@ -1,89 +1,138 @@
 ```java
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.core.env.Environment;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
-@Service
-public class ServiceRunner {
+@Component
+public class ServiceRunner implements SmartLifecycle {
+
     private static final Logger log = LoggerFactory.getLogger(ServiceRunner.class);
 
-    @Autowired
-    private Environment env;
-
-    // Thread pool for running services
-    private final ExecutorService executorService = Executors.newCachedThreadPool();
-
-    // Track running services
+    private final Environment env;
+    private final ExecutorService executorService = Executors.newFixedThreadPool(5);
     private final Map<String, Future<?>> runningServices = new ConcurrentHashMap<>();
+    private volatile boolean running = false;
 
-    private static final List<String> SERVICES = List.of(
-            "fix-gateway", "exchange-manager", "md-feed", "order-processor", "price-manager"
+    private final List<String> services = List.of(
+        "fix-gateway", "exchange-manager", "md-feed", "order-processor", "price-manager"
     );
 
-    @PostConstruct
-    public void startAllServices() {
-        log.info("Starting all services by default...");
-        SERVICES.forEach(this::startService);
+    public ServiceRunner(Environment env) {
+        this.env = env;
     }
 
+    /**
+     * Called automatically by Spring when the application starts.
+     */
+    @Override
+    public void start() {
+        log.info("Starting all services...");
+        running = true;
+        services.forEach(this::startService);
+    }
+
+    /**
+     * Starts an individual service.
+     */
     public void startService(String serviceName) {
         if (runningServices.containsKey(serviceName)) {
-            log.warn("Service {} is already running.", serviceName);
+            log.warn("Service '{}' is already running.", serviceName);
             return;
         }
 
         Future<?> future = executorService.submit(() -> {
             try {
                 log.info("Starting service: {}", serviceName);
-                var profile = env.getProperty("ambrosia.profile");
-                assert profile != null;
-
-                var serviceEnvironment = ServiceEnvironment.newEnvironment()
-                        .withResources(profile).build();
-
-                // Run service (assuming it is a blocking call)
+                final var serviceEnvironment = ServiceEnvironment.newEnvironment()
+                    .withResources(env.getProperty("ambrosia.profile")).build();
                 AmbrosiaConfig.run(serviceEnvironment, "services.yaml", serviceName);
-                
-                log.info("Service {} is now running indefinitely.", serviceName);
+                log.info("Service '{}' is now running.", serviceName);
             } catch (Exception e) {
-                log.error("Error starting service {}: ", serviceName, e);
+                log.error("Error starting service '{}'", serviceName, e);
             }
         });
 
         runningServices.put(serviceName, future);
     }
 
+    /**
+     * Stops all services gracefully.
+     */
+    @Override
+    public void stop() {
+        log.info("Stopping all services...");
+        running = false;
+        runningServices.keySet().forEach(this::stopService);
+        shutdownExecutor();
+    }
+
+    /**
+     * Stops an individual service.
+     */
     public void stopService(String serviceName) {
         Future<?> future = runningServices.remove(serviceName);
         if (future == null) {
-            log.warn("Service {} is not running.", serviceName);
+            log.warn("Service '{}' is not running.", serviceName);
             return;
         }
 
-        // Cancel the service execution
         future.cancel(true);
-        log.info("Service {} has been stopped.", serviceName);
+        log.info("Service '{}' has been stopped.", serviceName);
     }
 
-    public Map<String, Boolean> getServiceStatus() {
-        Map<String, Boolean> status = new ConcurrentHashMap<>();
-        runningServices.forEach((service, future) -> status.put(service, !future.isCancelled()));
-        return status;
+    /**
+     * Checks if the lifecycle component is running.
+     */
+    @Override
+    public boolean isRunning() {
+        return running;
     }
 
-    @PreDestroy
-    public void shutdownAllServices() {
-        log.info("Shutting down all services...");
-        runningServices.keySet().forEach(this::stopService);
+    /**
+     * Ensures that this component starts automatically.
+     */
+    @Override
+    public boolean isAutoStartup() {
+        return true;
+    }
+
+    /**
+     * Shutdown logic for the executor service.
+     */
+    private void shutdownExecutor() {
         executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
+                log.warn("Forcing executor shutdown...");
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            executorService.shutdownNow();
+        }
+    }
+
+    /**
+     * Stops services asynchronously with a callback.
+     */
+    @Override
+    public void stop(Runnable callback) {
+        stop();
+        callback.run();
+    }
+
+    /**
+     * Returns the phase for SmartLifecycle components.
+     */
+    @Override
+    public int getPhase() {
+        return 0;
     }
 }
 
@@ -95,20 +144,20 @@ import java.util.Map;
 @RestController
 @RequestMapping("/services")
 public class ServiceController {
-    
+
     @Autowired
     private ServiceRunner serviceRunner;
-
-    @PostMapping("/stop/{serviceName}")
-    public String stopService(@PathVariable String serviceName) {
-        serviceRunner.stopService(serviceName);
-        return "Service " + serviceName + " stopped.";
-    }
 
     @PostMapping("/start/{serviceName}")
     public String startService(@PathVariable String serviceName) {
         serviceRunner.startService(serviceName);
         return "Service " + serviceName + " started.";
+    }
+
+    @PostMapping("/stop/{serviceName}")
+    public String stopService(@PathVariable String serviceName) {
+        serviceRunner.stopService(serviceName);
+        return "Service " + serviceName + " stopped.";
     }
 
     @GetMapping("/status")
