@@ -1,85 +1,67 @@
-# Cucumber Test Data Flow
+```java
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
 
-## Overview
-This document describes how Cucumber test data is processed and stored in the database. It outlines the relationships between entities and provides example tables using the provided JSON input.
+import javax.annotation.PostConstruct;
+import java.util.List;
+import java.util.concurrent.*;
 
-## Data Flow Process
+@Component
+public class ServiceRunner {
+    private static final Logger log = LoggerFactory.getLogger(ServiceRunner.class);
 
-### **1. TestFeature Table**
-- **What gets stored?**
-  - The feature name and description from the JSON.
-  - Links to the corresponding application (`APP_ID`).
-- **Example Entry:**
-  
-  | ID  | FEATURE_NAME                  | FEATURE_DESCRIPTION      | APP_ID |
-  |-----|--------------------------------|--------------------------|--------|
-  | 1   | tradeServiceTests.feature      | FX Trade Service         | 10     |
+    @Autowired
+    private Environment env;
 
----
-### **2. Test Table (Scenarios)**
-- **What gets stored?**
-  - Each scenario from the feature is stored in the **Test** table.
-  - Linked to `TestFeature` via `TEST_FEATURE_ID`.
-  
-  **Example Entries:**
-  
-  | ID  | DISPLAY_NAME                          | TEST_FEATURE_ID |
-  |-----|---------------------------------------|----------------|
-  | 1   | Successfully place a single trade    | 1              |
-  | 2   | Place multiple trades               | 1              |
-  
----
-### **3. TestStep Table**
-- **What gets stored?**
-  - Each step within a scenario is inserted.
-  - Linked to the corresponding `Test` entry via `TEST_ID`.
-  - If the step fails, an exception reference is stored.
-  
-  **Example Entries:**
-  
-  | ID  | STEP_NAME                         | STATUS  | TEST_ID | EXCEPTION_ID |
-  |-----|----------------------------------|---------|--------|--------------|
-  | 1   | The user is logged into the trade service  | PASSED  | 1      | NULL         |
-  | 2   | The user places a trade for 100 shares of "EUR/USD" | PASSED  | 1      | NULL         |
-  | 3   | The trade is successfully placed | PASSED  | 1      | NULL         |
-  | 4   | The user places the following trades | PASSED  | 2      | NULL         |
-  | 5   | All trades are successfully placed | PASSED  | 2      | NULL         |
+    // Thread pool for managing service startup
+    private static final ExecutorService executorService = Executors.newFixedThreadPool(5);
 
----
-### **4. Exception Table (For Failed Steps)**
-- **What gets stored?**
-  - If a step fails, the error message is stored as an exception.
-  
-  **Example Entry:**
-  
-  | ID  | MESSAGE                 |
-  |-----|--------------------------|
-  | 1   | Insufficient balance     |
-  
----
-### **5. TestStepData Table (For Steps With Data Tables)**
-- **What gets stored?**
-  - If a step has a data table, each key-value pair is stored.
-  - Linked to the corresponding `TestStep` entry.
-  
-  **Example Entries:**
-  
-  | ID  | TEST_STEP_ID | DATA_KEY  | DATA_VALUE |
-  |-----|-------------|-----------|------------|
-  | 1   | 4           | quantity  | 1000       |
-  | 2   | 4           | symbol    | USD/CAD    |
-  | 3   | 4           | quantity  | 1200       |
-  | 4   | 4           | symbol    | EUR/USD    |
-  | 5   | 4           | quantity  | 1400       |
-  | 6   | 4           | symbol    | AUD/USD    |
-  
----
-## **Summary of Flow**
-1. The **TestFeature** table receives the feature name and description.
-2. Each **scenario** from the JSON gets stored in the **Test** table, linked to the feature.
-3. Each **step** from a scenario is stored in **TestStep**, linked to a test.
-4. If a step fails, an entry is made in the **Exception** table and referenced in **TestStep**.
-5. If a step has **data**, it is stored in **TestStepData**.
+    @PostConstruct
+    public void runServices() {
+        var profile = env.getProperty("ambrosia.profile");
+        assert profile != null;
 
-This ensures that Cucumber’s hierarchical structure (Feature → Scenario → Steps → Data) is efficiently stored in the database.
+        List<String> services = List.of("fix-gateway", "exchange-manager", "md-feed", "order-processor", "price-manager");
 
+        services.forEach(service ->
+            executorService.submit(() -> {
+                try {
+                    log.info("Starting service: {}", service);
+                    final var serviceEnvironment = ServiceEnvironment.newEnvironment()
+                        .withResources(profile).build();
+
+                    // Start service (assuming AmbrosiaConfig.run() keeps it running)
+                    AmbrosiaConfig.run(serviceEnvironment, "services.yaml", service);
+
+                    log.info("Service started: {} and is now running indefinitely.", service);
+                } catch (Exception e) {
+                    log.error("Error starting service: {}", service, e);
+                }
+            })
+        );
+
+        log.info("All services have been triggered to start and will remain running.");
+        
+        // Register a shutdown hook to clean up on exit
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            log.info("Shutting down all services...");
+            shutdownExecutor();
+        }));
+    }
+
+    private void shutdownExecutor() {
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
+                log.warn("Forcing executor shutdown...");
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
+        }
+    }
+}
+```
