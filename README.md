@@ -1,3 +1,4 @@
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="INFO">
     <Properties>
@@ -54,3 +55,4 @@
         </Root>
     </Loggers>
 </Configuration>
+```
