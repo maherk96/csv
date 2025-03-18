@@ -6,37 +6,30 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Abstract class for message senders that require scheduled concurrent execution.
- * Handles scheduling logic for sending market data snapshots at regular intervals.
+ * Helper class for managing scheduled concurrent execution of message sending.
+ * Used via composition by message senders like TibrvMessageSender and SolaceMessageSender.
  */
 @Slf4j
-public abstract class AbstractConcurrentMessageSender implements MessageSender {
+public class ConcurrentMessageScheduler {
     private final Map<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(5);
     private final ReentrantLock lock = new ReentrantLock();
 
     /**
-     * Sends market data immediately.
-     * Subclasses must implement this to define the actual messaging transport logic.
+     * Schedules a market data snapshot to be sent periodically.
      *
-     * @param snapshot The market data snapshot to send
+     * @param snapshot The market data snapshot
+     * @param intervalSeconds The interval (in seconds) between sends
+     * @param sender The message sender that will send the snapshot
      */
-    protected abstract void sendMessage(DspMarketDataSnapShot snapshot);
-
-    @Override
-    public void sendMarketData(DspMarketDataSnapShot snapshot) {
-        CompletableFuture.runAsync(() -> sendMessage(snapshot));
-    }
-
-    @Override
-    public void startScheduledSending(DspMarketDataSnapShot snapshot, long intervalSeconds) {
+    public void startScheduledSending(DspMarketDataSnapShot snapshot, long intervalSeconds, MessageSender sender) {
         String key = snapshot.getSymbol();
 
         lock.lock();
         try {
-            stopScheduledSending(key); // Stop any existing schedule for this symbol
+            stopScheduledSending(key); // Stop existing schedule if needed
 
-            ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(() -> sendMessage(snapshot),
+            ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(() -> sender.sendMarketData(snapshot),
                     0, intervalSeconds, TimeUnit.SECONDS);
 
             scheduledTasks.put(key, future);
@@ -47,20 +40,7 @@ public abstract class AbstractConcurrentMessageSender implements MessageSender {
     }
 
     /**
-     * Updates the interval of a scheduled snapshot.
-     *
-     * @param symbol The currency pair symbol
-     * @param newIntervalSeconds The new interval in seconds
-     */
-    public void updateScheduledInterval(String symbol, long newIntervalSeconds) {
-        stopScheduledSending(symbol);
-        log.info("Updating interval for {} to {} seconds", symbol, newIntervalSeconds);
-        DspMarketDataSnapShot snapshot = getLastSnapshotForSymbol(symbol);
-        startScheduledSending(snapshot, newIntervalSeconds);
-    }
-
-    /**
-     * Stops a scheduled snapshot for a specific symbol.
+     * Stops scheduled sending for a specific symbol.
      *
      * @param symbol The currency pair symbol
      */
@@ -78,7 +58,7 @@ public abstract class AbstractConcurrentMessageSender implements MessageSender {
     }
 
     /**
-     * Stops all scheduled snapshots.
+     * Stops all scheduled market data snapshots.
      */
     public void stopAllScheduledSending() {
         lock.lock();
@@ -89,18 +69,6 @@ public abstract class AbstractConcurrentMessageSender implements MessageSender {
         } finally {
             lock.unlock();
         }
-    }
-
-    /**
-     * Retrieves the last sent snapshot for a given symbol.
-     * Subclasses may override this to provide actual storage or caching logic.
-     *
-     * @param symbol The currency pair symbol
-     * @return The last known snapshot (default implementation returns a new empty snapshot)
-     */
-    protected DspMarketDataSnapShot getLastSnapshotForSymbol(String symbol) {
-        // In a real implementation, retrieve this from a cache or database
-        return new DspMarketDataSnapShot();
     }
 }
 ```
