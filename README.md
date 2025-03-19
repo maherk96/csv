@@ -1,74 +1,78 @@
 ```java
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Assertions;
+
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import lombok.extern.slf4j.Slf4j;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
-/**
- * Helper class for managing scheduled concurrent execution of message sending.
- * Used via composition by message senders like TibrvMessageSender and SolaceMessageSender.
- */
-@Slf4j
-public class ConcurrentMessageScheduler {
-    private final Map<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(5);
-    private final ReentrantLock lock = new ReentrantLock();
+public class ListDuplicateCheckerAwaitility {
+
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private static final Logger logger = Logger.getLogger(ListDuplicateCheckerAwaitility.class.getName());
+    private final List<Future<?>> runningTasks = new CopyOnWriteArrayList<>();
 
     /**
-     * Schedules a market data snapshot to be sent periodically.
+     * Checks for duplicates in the supplied list in the background using Awaitility.
+     * Allows flexible handling via a Consumer.
      *
-     * @param snapshot The market data snapshot
-     * @param intervalSeconds The interval (in seconds) between sends
-     * @param sender The message sender that will send the snapshot
+     * @param listSupplier        Supplies the list to check.
+     * @param uniqueKeyExtractor  Extracts the unique key from each element.
+     * @param onDuplicatesFound   Consumer to handle duplicates (logging, assertion failure, etc.).
+     * @param <T>                 Type of elements in the list.
+     * @param <R>                 Type of unique key (e.g., String, Integer).
      */
-    public void startScheduledSending(DspMarketDataSnapShot snapshot, long intervalSeconds, MessageSender sender) {
-        String key = snapshot.getSymbol();
+    public <T, R> void checkForDuplicatesWithAwaitility(
+            Supplier<List<T>> listSupplier,
+            Function<T, R> uniqueKeyExtractor,
+            Consumer<List<T>> onDuplicatesFound) {
 
-        lock.lock();
-        try {
-            stopScheduledSending(key); // Stop existing schedule if needed
+        Future<?> task = executorService.submit(() -> {
+            Set<R> seen = new HashSet<>();
 
-            ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(() -> sender.sendMarketData(snapshot),
-                    0, intervalSeconds, TimeUnit.SECONDS);
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)  // Max wait time
+                    .pollInterval(Duration.ofSeconds(1))  // Check every second
+                    .until(() -> {
+                        List<T> list = listSupplier.get(); // Always get the latest list
+                        List<T> duplicates = list.stream()
+                                .filter(e -> !seen.add(uniqueKeyExtractor.apply(e))) // Check uniqueness
+                                .collect(Collectors.toList());
 
-            scheduledTasks.put(key, future);
-            log.info("Started scheduled sending for {} every {} seconds", key, intervalSeconds);
-        } finally {
-            lock.unlock();
-        }
+                        if (!duplicates.isEmpty()) {
+                            logger.warning("Duplicates found: " + duplicates);
+                            onDuplicatesFound.accept(duplicates); // Delegate handling to the user
+                            return true;  // Stop polling
+                        }
+                        return false; // Keep polling
+                    });
+
+        });
+
+        runningTasks.add(task);
     }
 
     /**
-     * Stops scheduled sending for a specific symbol.
-     *
-     * @param symbol The currency pair symbol
+     * Cancels all running duplicate checks.
      */
-    public void stopScheduledSending(String symbol) {
-        lock.lock();
-        try {
-            ScheduledFuture<?> future = scheduledTasks.remove(symbol);
-            if (future != null) {
-                future.cancel(false);
-                log.info("Stopped scheduled sending for {}", symbol);
-            }
-        } finally {
-            lock.unlock();
+    public void cancelChecks() {
+        for (Future<?> task : runningTasks) {
+            task.cancel(true);
         }
+        runningTasks.clear();
     }
 
     /**
-     * Stops all scheduled market data snapshots.
+     * Gracefully shuts down the executor service.
      */
-    public void stopAllScheduledSending() {
-        lock.lock();
-        try {
-            scheduledTasks.values().forEach(future -> future.cancel(false));
-            scheduledTasks.clear();
-            log.info("Stopped all scheduled tasks.");
-        } finally {
-            lock.unlock();
-        }
+    public void shutdown() {
+        cancelChecks();
+        executorService.shutdown();
     }
 }
 ```
