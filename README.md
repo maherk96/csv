@@ -1,10 +1,11 @@
 ```java
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Assertions;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -15,7 +16,6 @@ public class ListDuplicateCheckerAwaitility {
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private static final Logger logger = Logger.getLogger(ListDuplicateCheckerAwaitility.class.getName());
-    private final List<Future<?>> runningTasks = new CopyOnWriteArrayList<>();
 
     /**
      * Checks for duplicates in the supplied list in the background using Awaitility.
@@ -32,16 +32,21 @@ public class ListDuplicateCheckerAwaitility {
             Function<T, R> uniqueKeyExtractor,
             Consumer<List<T>> onDuplicatesFound) {
 
-        Future<?> task = executorService.submit(() -> {
+        executorService.submit(() -> {
             Set<R> seen = new HashSet<>();
 
             Awaitility.await()
                     .atMost(10, TimeUnit.SECONDS)  // Max wait time
                     .pollInterval(Duration.ofSeconds(1))  // Check every second
                     .until(() -> {
-                        List<T> list = listSupplier.get(); // Always get the latest list
+                        List<T> list = listSupplier.get();
+                        if (list == null || list.isEmpty()) {
+                            return false; // No need to check if list is empty
+                        }
+
+                        // Identify duplicates using a HashSet
                         List<T> duplicates = list.stream()
-                                .filter(e -> !seen.add(uniqueKeyExtractor.apply(e))) // Check uniqueness
+                                .filter(e -> !seen.add(uniqueKeyExtractor.apply(e))) // Detect duplicates
                                 .collect(Collectors.toList());
 
                         if (!duplicates.isEmpty()) {
@@ -51,28 +56,22 @@ public class ListDuplicateCheckerAwaitility {
                         }
                         return false; // Keep polling
                     });
-
         });
-
-        runningTasks.add(task);
-    }
-
-    /**
-     * Cancels all running duplicate checks.
-     */
-    public void cancelChecks() {
-        for (Future<?> task : runningTasks) {
-            task.cancel(true);
-        }
-        runningTasks.clear();
     }
 
     /**
      * Gracefully shuts down the executor service.
      */
     public void shutdown() {
-        cancelChecks();
         executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(2, TimeUnit.SECONDS)) {
+                executorService.shutdownNow(); // Force shutdown if not done
+            }
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 }
 ```
