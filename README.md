@@ -1,76 +1,91 @@
 ```java
-import org.awaitility.Awaitility;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.TaskExecutor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import javax.annotation.PreDestroy;
 
-import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
+@Service
+public abstract class AbstractTestPortalService<T> {
 
-public class ListDuplicateCheckerAwaitility {
+    private final QAPLaunchQueue dataQueue;
+    private final TaskExecutor taskExecutor;
+    private volatile boolean shutdown = false;
 
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
-    private static final Logger logger = Logger.getLogger(ListDuplicateCheckerAwaitility.class.getName());
+    protected final ApplicationService appService;
+    protected final EnvironmentService envService;
+    protected final UserService userService;
+    protected final TestRunService testRunService;
+    protected final TestService testService;
+    protected final LogService logService;
+    protected final FixService fixService;
+    protected final ExceptionService exceptionService;
+    protected final TestLaunchService testLaunchService;
+    protected final TestClassService testClassService;
+    protected final ThreadPoolTaskExecutor executorService;
+    protected final TestTagService testTagService;
+    protected final TestParamService testParamService;
 
-    /**
-     * Checks for duplicates in the supplied list in the background using Awaitility.
-     * Allows flexible handling via a Consumer.
-     *
-     * @param listSupplier        Supplies the list to check.
-     * @param uniqueKeyExtractor  Extracts the unique key from each element.
-     * @param onDuplicatesFound   Consumer to handle duplicates (logging, assertion failure, etc.).
-     * @param <T>                 Type of elements in the list.
-     * @param <R>                 Type of unique key (e.g., String, Integer).
-     */
-    public <T, R> void checkForDuplicatesWithAwaitility(
-            Supplier<List<T>> listSupplier,
-            Function<T, R> uniqueKeyExtractor,
-            Consumer<List<T>> onDuplicatesFound) {
+    @Autowired
+    public AbstractTestPortalService(
+        QAPLaunchQueue dataQueue,
+        TaskExecutor taskExecutor,
+        ApplicationService appService,
+        EnvironmentService envService,
+        UserService userService,
+        TestRunService testRunService,
+        TestService testService,
+        LogService logService,
+        FixService fixService,
+        ExceptionService exceptionService,
+        TestLaunchService testLaunchService,
+        TestClassService testClassService,
+        ThreadPoolTaskExecutor executorService,
+        TestTagService testTagService,
+        TestParamService testParamService
+    ) {
+        this.dataQueue = dataQueue;
+        this.taskExecutor = taskExecutor;
+        this.appService = appService;
+        this.envService = envService;
+        this.userService = userService;
+        this.testRunService = testRunService;
+        this.testService = testService;
+        this.logService = logService;
+        this.fixService = fixService;
+        this.exceptionService = exceptionService;
+        this.testLaunchService = testLaunchService;
+        this.testClassService = testClassService;
+        this.executorService = executorService;
+        this.testTagService = testTagService;
+        this.testParamService = testParamService;
+        processData();
+    }
 
-        executorService.submit(() -> {
-            Set<R> seen = new HashSet<>();
-
-            Awaitility.await()
-                    .atMost(10, TimeUnit.SECONDS)  // Max wait time
-                    .pollInterval(Duration.ofSeconds(1))  // Check every second
-                    .until(() -> {
-                        List<T> list = listSupplier.get();
-                        if (list == null || list.isEmpty()) {
-                            return false; // No need to check if list is empty
-                        }
-
-                        // Identify duplicates using a HashSet
-                        List<T> duplicates = list.stream()
-                                .filter(e -> !seen.add(uniqueKeyExtractor.apply(e))) // Detect duplicates
-                                .collect(Collectors.toList());
-
-                        if (!duplicates.isEmpty()) {
-                            logger.warning("Duplicates found: " + duplicates);
-                            onDuplicatesFound.accept(duplicates); // Delegate handling to the user
-                            return true;  // Stop polling
-                        }
-                        return false; // Keep polling
-                    });
+    private void processData() {
+        taskExecutor.execute(() -> {
+            while (!shutdown) {
+                try {
+                    T launchData = (T) dataQueue.take();
+                    if (launchData != null) {
+                        processTestReportData(launchData);
+                    }
+                } catch (Exception e) {
+                    if (!shutdown) {
+                        logService.error("Error processing data from queue", e);
+                    }
+                }
+            }
         });
     }
 
-    /**
-     * Gracefully shuts down the executor service.
-     */
+    protected abstract void processTestReportData(T launchData);
+
+    @PreDestroy
     public void shutdown() {
-        executorService.shutdown();
-        try {
-            if (!executorService.awaitTermination(2, TimeUnit.SECONDS)) {
-                executorService.shutdownNow(); // Force shutdown if not done
-            }
-        } catch (InterruptedException e) {
-            executorService.shutdownNow();
-            Thread.currentThread().interrupt();
+        shutdown = true;
+        if (taskExecutor instanceof ThreadPoolTaskExecutor) {
+            ((ThreadPoolTaskExecutor) taskExecutor).shutdown();
         }
     }
 }
