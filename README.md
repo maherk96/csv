@@ -1,11 +1,10 @@
 
-
-Goal
-
-Develop and deliver mock services for COR and Position Manager to enable QA teams to bypass UAT environments, increase test independence, and enhance system coverage.
+Enhance and scale the Quality Assurance Portal (QAP) to centralize test visibility, streamline sign-off workflows, and strengthen quality assurance governance across the tech stack.
 
 ⸻
 
 Description
 
-Design and implement robust, reusable mock services that replicate the behavior of COR and Position Manager, empowering QA teams to run automated tests independently of UAT environments. This supports Client & Franchise Outcomes by improving the quality and reliability of systems delivered to internal clients. By reducing test environment dependencies, the solution accelerates delivery timelines, enhances collaboration across teams, and ensures consistent, high-quality outcomes for stakeholders across the franchise. It enables more effective resource allocation and increases responsiveness to business needs.
+Continue expanding the QAP to support richer test reporting features, integration across all layers of the tech stack, and automated sign-off processes. This initiative directly supports Risk & Control by providing a consistent and auditable approach to test management. Through standardized data collection, real-time reporting, and systemized sign-offs, the platform helps reduce operational risk, ensures traceability of QA activities, and improves transparency for internal audits and compliance reviews.
+
+⸻
