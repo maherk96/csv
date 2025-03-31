@@ -1,10 +1,7 @@
-
-Enhance and scale the Quality Assurance Portal (QAP) to centralize test visibility, streamline sign-off workflows, and strengthen quality assurance governance across the tech stack.
+Advance the development of QAP to support performance analytics, trend monitoring, and cross-team visibility through accessible APIs — laying the groundwork for improved efficiency and smarter QA resource planning.
 
 ⸻
 
 Description
 
-Continue expanding the QAP to support richer test reporting features, integration across all layers of the tech stack, and automated sign-off processes. This initiative directly supports Risk & Control by providing a consistent and auditable approach to test management. Through standardized data collection, real-time reporting, and systemized sign-offs, the platform helps reduce operational risk, ensures traceability of QA activities, and improves transparency for internal audits and compliance reviews.
-
-⸻
+While QAP is still being built out, we are actively expanding its capabilities to support financial performance goals through data transparency and intelligent automation. By offering a suite of REST APIs, we enable QA and development teams to extract valuable insights such as test trends, failure rates, class-level coverage, and baseline vs. release performance metrics. These insights are helping teams identify bottlenecks, reduce rework, and make more informed decisions — all of which contribute to better resource utilization and reduced cost across the tech stack. As we progress, QAP will play a critical role in aligning QA investment with measurable business value.
