@@ -1,35 +1,14 @@
+addOrder:
+Assumed that both liveOrdersByPrice.get(symbol) and .get(side) were already initialised. If this wasn’t the case, attempting to .put() an order into a null map caused a NullPointerException.
+If a new order with side BUY came in and no previous BUY orders existed for that symbol, the call to .put(price, orderRef) would throw an exception because the internal map hadn’t been set up yet.
 
-```java
-@Override
-public void removeOrder(String orderRef) {
-    var liveOrder = liveOrders.remove(orderRef);
-    if (liveOrder == null) return;
+removeOrder:
+The method attempted to remove orders from nested maps without checking if those maps existed. If the symbol or side didn’t exist, this led to a NullPointerException. Additionally, cleared empty maps that could affect later logic or memory use.
 
-    var symbol = liveOrder.getSymbol();
-    var side = liveOrder.getSide();
-    var price = liveOrder.getPrice();
+getToPrice:
+Calling .firstKey() on an empty TreeMap led to a NoSuchElementException, which could occur during startup or if no orders had yet been added.
+Saw this when price manager failed to start, calling getToPrice() on the GBP/USD order book would fail if no liquidity had been configured yet — since .firstKey() can’t operate on an empty map.
 
-    // Decrement count
-    int updatedCount = liveOrderCountBySymbol.merge(symbol, -1, Integer::sum);
-    if (updatedCount <= 0) {
-        liveOrderCountBySymbol.remove(symbol);
-    }
-
-    // Remove from price map
-    var sideMap = liveOrdersByPrice.get(symbol);
-    if (sideMap == null) return;
-
-    var priceMap = sideMap.get(side);
-    if (priceMap == null) return;
-
-    priceMap.remove(price);
-
-    // Optional: Clean up empty maps
-    if (priceMap.isEmpty()) {
-        sideMap.remove(side);
-    }
-    if (sideMap.isEmpty()) {
-        liveOrdersByPrice.remove(symbol);
-    }
-}
-```
+identifyMatchingOrders:
+accessed liveOrdersByPrice.get(symbol).get(side), which could be null if no orders had been placed for that symbol and side. 
+When matching an incoming SELL order for "EUR/GBP", it tried to stream from headMap(price), but if no SELL orders had been placed, the internal map was null.
