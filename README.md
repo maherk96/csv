@@ -3,33 +3,33 @@
 @Override
 public void removeOrder(String orderRef) {
     var liveOrder = liveOrders.remove(orderRef);
-    if (liveOrder == null) return; // Order was not found, nothing to do
+    if (liveOrder == null) return;
+
+    var symbol = liveOrder.getSymbol();
+    var side = liveOrder.getSide();
+    var price = liveOrder.getPrice();
 
     // Decrement count
-    var symbol = liveOrder.getSymbol();
-    var count = liveOrderCountBySymbol.getOrDefault(symbol, 1) - 1;
-    if (count <= 0) {
+    int updatedCount = liveOrderCountBySymbol.merge(symbol, -1, Integer::sum);
+    if (updatedCount <= 0) {
         liveOrderCountBySymbol.remove(symbol);
+    }
+
+    // Remove from price map
+    var sideMap = liveOrdersByPrice.get(symbol);
+    if (sideMap == null) return;
+
+    var priceMap = sideMap.get(side);
+    if (priceMap == null) return;
+
+    priceMap.remove(price);
+
+    // Optional: Clean up empty maps
+    if (priceMap.isEmpty()) {
+        sideMap.remove(side);
+    }
+    if (sideMap.isEmpty()) {
         liveOrdersByPrice.remove(symbol);
-    } else {
-        liveOrderCountBySymbol.put(symbol, count);
-
-        // Safely remove from nested structure
-        var sideMap = liveOrdersByPrice.get(symbol);
-        if (sideMap != null) {
-            var priceMap = sideMap.get(liveOrder.getSide());
-            if (priceMap != null) {
-                priceMap.remove(liveOrder.getPrice());
-
-                // Optional: clean up empty maps to prevent memory leaks
-                if (priceMap.isEmpty()) {
-                    sideMap.remove(liveOrder.getSide());
-                }
-                if (sideMap.isEmpty()) {
-                    liveOrdersByPrice.remove(symbol);
-                }
-            }
-        }
     }
 }
 ```
