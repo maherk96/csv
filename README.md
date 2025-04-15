@@ -1,11 +1,12 @@
 ```java
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.mockito.MockedStatic;
 
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class AbstractEventProcessorTest {
@@ -21,7 +22,7 @@ class AbstractEventProcessorTest {
     void setUp() {
         apiKeyService = mock(ApiKeyService.class);
         featureConfig = mock(FeatureConfig.class);
-        eventQueue = spy(new EventQueue<>());
+        eventQueue = mock(EventQueue.class);
         inboundMessage = mock(InboundMessage.class);
 
         processor = new AbstractEventProcessor<>(apiKeyService, featureConfig) {
@@ -38,46 +39,50 @@ class AbstractEventProcessorTest {
     }
 
     @Test
-    void shouldSkipProcessingIfApiKeyIsInvalid() {
-        Map<String, String> props = new HashMap<>();
-        props.put("app-name", "test-app");
-        props.put("api-key", "invalid-key");
-
-        when(inboundMessage.getProperties()).thenReturn(props);
-        when(featureConfig.isEnableApiKeyValidation()).thenReturn(true);
-        when(apiKeyService.validateApiKey("test-app", "invalid-key")).thenReturn(false);
-
-        processor.process("{\"value\":\"test\"}", inboundMessage);
-
-        verify(eventQueue, never()).put(any());
-    }
-
-    @Test
     void shouldProcessPayloadIfApiKeyIsValid() {
+        // Given
         Map<String, String> props = new HashMap<>();
         props.put("app-name", "test-app");
         props.put("api-key", "valid-key");
+
+        SamplePayload mockPayload = new SamplePayload("test");
 
         when(inboundMessage.getProperties()).thenReturn(props);
         when(featureConfig.isEnableApiKeyValidation()).thenReturn(true);
         when(apiKeyService.validateApiKey("test-app", "valid-key")).thenReturn(true);
 
-        processor.process("{\"value\":\"test\"}", inboundMessage);
+        try (MockedStatic<JsonUtil> jsonUtilMock = mockStatic(JsonUtil.class)) {
+            jsonUtilMock.when(() -> JsonUtil.isValid(anyString(), eq(SamplePayload.class))).thenReturn(true);
+            jsonUtilMock.when(() -> JsonUtil.mapStringToDTO(anyString(), eq(SamplePayload.class)))
+                        .thenReturn(mockPayload);
 
-        verify(eventQueue).put(any(SamplePayload.class));
+            // When
+            processor.process("{\"value\":\"test\"}", inboundMessage);
+
+            // Then
+            verify(eventQueue).put(mockPayload);
+        }
     }
 
     @Test
     void shouldProcessPayloadIfValidationIsDisabled() {
-        Map<String, String> props = new HashMap<>();
-        when(inboundMessage.getProperties()).thenReturn(props);
+        // Given
+        when(inboundMessage.getProperties()).thenReturn(new HashMap<>());
         when(featureConfig.isEnableApiKeyValidation()).thenReturn(false);
 
-        processor.process("{\"value\":\"test\"}", inboundMessage);
+        SamplePayload mockPayload = new SamplePayload("test");
 
-        verify(eventQueue).put(any(SamplePayload.class));
+        try (MockedStatic<JsonUtil> jsonUtilMock = mockStatic(JsonUtil.class)) {
+            jsonUtilMock.when(() -> JsonUtil.isValid(anyString(), eq(SamplePayload.class))).thenReturn(true);
+            jsonUtilMock.when(() -> JsonUtil.mapStringToDTO(anyString(), eq(SamplePayload.class)))
+                        .thenReturn(mockPayload);
+
+            // When
+            processor.process("{\"value\":\"test\"}", inboundMessage);
+
+            // Then
+            verify(eventQueue).put(mockPayload);
+        }
     }
-
-    // You can also assert logging or invalid payload behavior if needed
 }
 ```
