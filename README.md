@@ -1,72 +1,83 @@
 ```java
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.assertThat;
+import org.mockito.Mockito;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
+import java.util.Map;
 
-class EventQueueTest {
+import static org.mockito.Mockito.*;
 
-    @Test
-    void shouldAddAndRetrieveData() throws InterruptedException {
-        EventQueue<String> queue = new EventQueue<>();
+class AbstractEventProcessorTest {
 
-        queue.put("test-message");
+    private ApiKeyService apiKeyService;
+    private FeatureConfig featureConfig;
+    private EventQueue<SamplePayload> eventQueue;
+    private InboundMessage inboundMessage;
 
-        String result = queue.take();
+    private AbstractEventProcessor<SamplePayload> processor;
 
-        assertThat(result).isEqualTo("test-message");
-    }
+    @BeforeEach
+    void setUp() {
+        apiKeyService = mock(ApiKeyService.class);
+        featureConfig = mock(FeatureConfig.class);
+        eventQueue = spy(new EventQueue<>());
+        inboundMessage = mock(InboundMessage.class);
 
-    @Test
-    void shouldBlockUntilDataIsAvailable() throws InterruptedException {
-        EventQueue<String> queue = new EventQueue<>();
-
-        var executor = Executors.newSingleThreadExecutor();
-
-        executor.submit(() -> {
-            try {
-                Thread.sleep(300); // Simulate delay
-                queue.put("delayed-message");
-            } catch (InterruptedException ignored) {}
-        });
-
-        long start = System.currentTimeMillis();
-        String result = queue.take();
-        long duration = System.currentTimeMillis() - start;
-
-        assertThat(result).isEqualTo("delayed-message");
-        assertThat(duration).isGreaterThanOrEqualTo(300);
-
-        executor.shutdown();
-    }
-
-    @Test
-    void shouldReturnNullIfInterruptedDuringPut() {
-        EventQueue<String> queue = new EventQueue<>() {
+        processor = new AbstractEventProcessor<>(apiKeyService, featureConfig) {
             @Override
-            public void put(String data) {
-                Thread.currentThread().interrupt(); // Simulate interruption
-                super.put(data);
+            protected Class<SamplePayload> getPayloadClass() {
+                return SamplePayload.class;
+            }
+
+            @Override
+            protected EventQueue<SamplePayload> getQueue() {
+                return eventQueue;
             }
         };
-
-        queue.put("interrupted-message"); // Should handle internally without crash
-        // No exception expected
     }
 
     @Test
-    void shouldReturnNullIfInterruptedDuringTake() {
-        EventQueue<String> queue = new EventQueue<>() {
-            @Override
-            public String take() {
-                Thread.currentThread().interrupt(); // Simulate interruption
-                return super.take();
-            }
-        };
+    void shouldSkipProcessingIfApiKeyIsInvalid() {
+        Map<String, String> props = new HashMap<>();
+        props.put("app-name", "test-app");
+        props.put("api-key", "invalid-key");
 
-        String result = queue.take(); // Should return null gracefully
-        assertThat(result).isNull();
+        when(inboundMessage.getProperties()).thenReturn(props);
+        when(featureConfig.isEnableApiKeyValidation()).thenReturn(true);
+        when(apiKeyService.validateApiKey("test-app", "invalid-key")).thenReturn(false);
+
+        processor.process("{\"value\":\"test\"}", inboundMessage);
+
+        verify(eventQueue, never()).put(any());
     }
+
+    @Test
+    void shouldProcessPayloadIfApiKeyIsValid() {
+        Map<String, String> props = new HashMap<>();
+        props.put("app-name", "test-app");
+        props.put("api-key", "valid-key");
+
+        when(inboundMessage.getProperties()).thenReturn(props);
+        when(featureConfig.isEnableApiKeyValidation()).thenReturn(true);
+        when(apiKeyService.validateApiKey("test-app", "valid-key")).thenReturn(true);
+
+        processor.process("{\"value\":\"test\"}", inboundMessage);
+
+        verify(eventQueue).put(any(SamplePayload.class));
+    }
+
+    @Test
+    void shouldProcessPayloadIfValidationIsDisabled() {
+        Map<String, String> props = new HashMap<>();
+        when(inboundMessage.getProperties()).thenReturn(props);
+        when(featureConfig.isEnableApiKeyValidation()).thenReturn(false);
+
+        processor.process("{\"value\":\"test\"}", inboundMessage);
+
+        verify(eventQueue).put(any(SamplePayload.class));
+    }
+
+    // You can also assert logging or invalid payload behavior if needed
 }
 ```
