@@ -1,7 +1,6 @@
 ```sql
-SELECT column_name, data_length 
-FROM all_tab_columns 
-WHERE table_name = 'PERFORMANCE_METRICS' 
-  AND column_name = 'MODEL_LATENCY';
+@Query("select (count(t) > 0) from Test t where t.displayName = :displayName and t.testClass.id = :id")
+boolean scenarioNameExistForFeature(@Param("displayName") String displayName,
+                                    @Param("id") Long id);
 
 ```
