@@ -1,6 +1,5 @@
 ```sql
-@Query("select t from Test t where t.displayName = :displayName and t.testClass.id = :id")
-Test getTestScenarioForTestFeature(@Param("displayName") String displayName,
-                                   @Param("id") Long id);
+TestFeature findByFeatureNameAndApp_Id(String featureName, Long appId);
+boolean existsByFeatureNameAndApp_Id(String featureName, Long appId);
 
 ```
