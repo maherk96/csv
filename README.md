@@ -1,92 +1,40 @@
-```yml
-spring:
-  profiles:
-    active: dev
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d [%t] %-5p %c{1} - %m%n"/>
+        </Console>
 
-  config:
-    import: classpath:heatmap-config.yml
+        <RollingFile name="LogFile"
+                     fileName="../logs/app_current.log"
+                     filePattern="../logs/app-%d{yyyy-MM-dd-HH-mm-ss}-%i.log">
+            <PatternLayout pattern="%d [%t] %-5p %c{1} - %m%n"/>
+            <Policies>
+                <OnStartupTriggeringPolicy/>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+            </Policies>
+        </RollingFile>
+    </Appenders>
 
-  datasource:
-    url: jdbc:oracle:thin:@//NAFXE1U.oraas.dyn.nsroot.net:8889/HANAFXE1U
-    username: QAPORTAL
-    password: M!FzGm45
-    dbcp2:
-      max-wait-millis: 30000
-      validation-query: select 1 from dual
-      validation-query-timeout: 30
-    type: oracle.ucp.jdbc.PoolDataSource
-    oracleucp:
-      minPoolSize: 4
-      maxPoolSize: 20
+    <Loggers>
+        <!-- SQL queries -->
+        <Logger name="org.hibernate.SQL" level="debug" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="LogFile"/>
+        </Logger>
 
-  jpa:
-    hibernate:
-      ddl-auto: none
-      open-in-view: false
-      properties:
-        hibernate:
-          jdbc:
-            time_zone: UTC
-          lob:
-            non_contextual_creation: true
-      new_generator_mappings: true
+        <!-- SQL query parameter values -->
+        <Logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="trace" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="LogFile"/>
+        </Logger>
 
-# ===================
-# KDB CONFIGURATION
-# ===================
-kdb:
-  environment: PREPROD
-  username: fxfusion_cloudkdb_reader
-  password: s6p2cu24
-  script:
-    locations:
-      - classpath:sql/qap-kdb-queries.q
-
-# ======================
-# SOLACE CONFIGURATION
-# ======================
-solace:
-  hostUrl: solace-fx1-us-1u-virt.nam.nsroot.net:55555,solace-fx1-us-2u-virt.nam.nsroot.net:55555
-  queueName: QUE_179380_QA_AUTOMATION_TEST_REPORT_UAT
-  vpnName: 179380_QA_REPORT_US_CTI_UAT
-  userName: uat_179380_qareporter_pubsub
-  password: 5x5yShhxtif
-  reconnectionAttempts: 5
-  connectionRetriesPerHost: 5
-  topicNames:
-    - QA/QAP/UAT/REPORT/JUNIT
-    - QA/QAP/UAT/REPORT/CUCUMBER
-
-# ====================
-# FEATURE FLAGS
-# ====================
-features:
-  enableApiKeyValidation: false
-
-# ====================
-# API DOCS
-# ====================
-springdoc:
-  pathsToMatch: /api/**
-
-# ====================
-# SERVER SETTINGS
-# ====================
-server:
-  servlet:
-    context-path: "/qaportal/"
-  port: "8090"
-  compression:
-    enabled: true
-    mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
-    min-response-size: 1024
-
-spring:
-  datasource:
-    url: jdbc:oracle:thin:@//NAFXE1D.oraas.dyn.nsroot.net:8889/NAFXE1D
-    password: PLfB089oW
-
-  jpa:
-    hibernate:
-      ddl-auto: update
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="LogFile"/>
+        </Root>
+    </Loggers>
+</Configuration>
 ```
