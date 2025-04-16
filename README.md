@@ -1,35 +1,43 @@
 ```java
 import java.util.Arrays;
 
-public record QAPJunitLifeCycleEvent(
-    LifeCycleEvent event,
-    byte[] exception,
-    byte[] logs
+public record TestLaunchLogSearchData(
+    int testRunID,
+    String displayName,
+    String methodName,
+    String testClassName,
+    String testLaunchID,
+    byte[] testLogs
 ) {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof QAPJunitLifeCycleEvent that)) return false;
-        return event == that.event &&
-               Arrays.equals(exception, that.exception) &&
-               Arrays.equals(logs, that.logs);
+        if (!(o instanceof TestLaunchLogSearchData that)) return false;
+        return testRunID == that.testRunID &&
+                Objects.equals(displayName, that.displayName) &&
+                Objects.equals(methodName, that.methodName) &&
+                Objects.equals(testClassName, that.testClassName) &&
+                Objects.equals(testLaunchID, that.testLaunchID) &&
+                Arrays.equals(testLogs, that.testLogs);
     }
 
     @Override
     public int hashCode() {
-        int result = event != null ? event.hashCode() : 0;
-        result = 31 * result + Arrays.hashCode(exception);
-        result = 31 * result + Arrays.hashCode(logs);
+        int result = Objects.hash(testRunID, displayName, methodName, testClassName, testLaunchID);
+        result = 31 * result + Arrays.hashCode(testLogs);
         return result;
     }
 
     @Override
     public String toString() {
-        return "QAPJunitLifeCycleEvent[" +
-               "event=" + event + 
-               ", exception=" + Arrays.toString(exception) +
-               ", logs=" + Arrays.toString(logs) +
-               ']';
+        return "TestLaunchLogSearchData[" +
+                "testRunID=" + testRunID +
+                ", displayName=" + displayName +
+                ", methodName=" + methodName +
+                ", testClassName=" + testClassName +
+                ", testLaunchID=" + testLaunchID +
+                ", testLogs=" + Arrays.toString(testLogs) +
+                ']';
     }
 }
 ```
