@@ -1,43 +1,56 @@
 ```java
-import java.util.Arrays;
 
-public record TestLaunchLogSearchData(
-    int testRunID,
-    String displayName,
-    String methodName,
-    String testClassName,
-    String testLaunchID,
-    byte[] testLogs
-) {
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof TestLaunchLogSearchData that)) return false;
-        return testRunID == that.testRunID &&
-                Objects.equals(displayName, that.displayName) &&
-                Objects.equals(methodName, that.methodName) &&
-                Objects.equals(testClassName, that.testClassName) &&
-                Objects.equals(testLaunchID, that.testLaunchID) &&
-                Arrays.equals(testLogs, that.testLogs);
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+
+import static org.mockito.Mockito.*;
+
+class TestDataPublisherTest {
+
+    private SolaceConfigLoader mockLoader;
+    private SolaceConfig mockConfig;
+
+    @BeforeEach
+    void setup() {
+        mockLoader = mock(SolaceConfigLoader.class);
+        mockConfig = mock(SolaceConfig.class);
+
+        when(mockConfig.getHost()).thenReturn("localhost");
+        when(mockConfig.getUsername()).thenReturn("user");
+        when(mockConfig.getPassword()).thenReturn("pass");
+        when(mockConfig.getVpnname()).thenReturn("vpn");
+        when(mockConfig.getTopic()).thenReturn("topic");
     }
 
-    @Override
-    public int hashCode() {
-        int result = Objects.hash(testRunID, displayName, methodName, testClassName, testLaunchID);
-        result = 31 * result + Arrays.hashCode(testLogs);
-        return result;
-    }
+    @Test
+    void shouldSendDataToUatEnvironment() {
+        // Arrange
+        when(mockLoader.getDefaultConnection()).thenReturn(mockConfig);
+        TestDataPublisher publisher = new TestDataPublisher(mockLoader);
 
-    @Override
-    public String toString() {
-        return "TestLaunchLogSearchData[" +
-                "testRunID=" + testRunID +
-                ", displayName=" + displayName +
-                ", methodName=" + methodName +
-                ", testClassName=" + testClassName +
-                ", testLaunchID=" + testLaunchID +
-                ", testLogs=" + Arrays.toString(testLogs) +
-                ']';
+        try (
+            MockedStatic<SolaceTestDataProducer> producerMock = mockStatic(SolaceTestDataProducer.class);
+            MockedStatic<JsonUtil> jsonUtilMock = mockStatic(JsonUtil.class)
+        ) {
+            SolaceTestDataProducer producer = mock(SolaceTestDataProducer.class);
+            producerMock.when(SolaceTestDataProducer::getInstance).thenReturn(producer);
+
+            jsonUtilMock.when(() -> JsonUtil.writeValueAsString("payload")).thenReturn("{\"mocked\":\"json\"}");
+
+            // Act
+            publisher.publish(RunEnvironment.UAT, "payload");
+
+            // Assert
+            verify(producer).send(
+                eq("localhost"),
+                eq("user"),
+                eq("pass"),
+                eq("vpn"),
+                eq("topic"),
+                eq("{\"mocked\":\"json\"}")
+            );
+        }
     }
 }
 ```
