@@ -1,7 +1,14 @@
 ```java
-public class TestDataProcessorBase<T> implements TestDataProcessor<T> {
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-    protected void processData(EventQueue<T> queue, TaskExecutor executor, Consumer<T> callback) {
+import javax.annotation.PreDestroy;
+import java.util.EventQueue;
+import java.util.function.Consumer;
+import java.util.concurrent.Executor;
+
+public abstract class BaseTestDataProcessor<T> implements TestDataProcessor<T> {
+
+    protected void doProcess(EventQueue<T> queue, Executor executor, Consumer<T> callback) {
         executor.execute(() -> {
             while (true) {
                 try {
@@ -10,17 +17,27 @@ public class TestDataProcessorBase<T> implements TestDataProcessor<T> {
                         callback.accept(launchData);
                     }
                 } catch (Exception e) {
-                    // log error
+                    handleProcessingError(e);
                 }
             }
         });
     }
 
+    protected void handleProcessingError(Exception e) {
+        System.err.println("Error processing data: " + e.getMessage());
+        e.printStackTrace(); // Replace with actual logger
+    }
+
     @PreDestroy
-    public void shutdown(TaskExecutor executor) {
+    public void shutdown(Executor executor) {
         if (executor instanceof ThreadPoolTaskExecutor) {
             ((ThreadPoolTaskExecutor) executor).shutdown();
         }
+    }
+
+    @Override
+    public void processData() {
+        throw new UnsupportedOperationException("processData() must be implemented by subclass.");
     }
 }
 ```
