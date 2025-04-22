@@ -1,19 +1,35 @@
 ```java
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
+import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 
-@Mapper(componentModel = "spring")
-public interface ExceptionMapper {
+import static org.junit.jupiter.api.Assertions.*;
 
-    ExceptionMapper INSTANCE = Mappers.getMapper(ExceptionMapper.class);
+class ExceptionMapperTest {
 
-    @Mapping(target = "id", source = "id")
-    @Mapping(target = "exception", source = "exception")
-    ExceptionDTO toDto(Exception exception);
+    private final ExceptionMapper mapper = Mappers.getMapper(ExceptionMapper.class);
 
-    @Mapping(target = "id", source = "id")
-    @Mapping(target = "exception", source = "exception")
-    Exception toEntity(ExceptionDTO dto);
+    @Test
+    void shouldMapEntityToDto() {
+        Exception entity = new Exception();
+        entity.setId(1L);
+        entity.setException("oops".getBytes());
+
+        ExceptionDTO dto = mapper.toDto(entity);
+
+        assertEquals(1L, dto.getId());
+        assertArrayEquals("oops".getBytes(), dto.getException());
+    }
+
+    @Test
+    void shouldMapDtoToEntity() {
+        ExceptionDTO dto = new ExceptionDTO();
+        dto.setId(2L);
+        dto.setException("whoops".getBytes());
+
+        Exception entity = mapper.toEntity(dto);
+
+        assertEquals(2L, entity.getId());
+        assertArrayEquals("whoops".getBytes(), entity.getException());
+    }
 }
 ```
