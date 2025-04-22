@@ -1,4 +1,22 @@
 ```java
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.factory.Mappers;
+
+@Mapper(componentModel = "spring")
+public interface ComponentMapper {
+
+    ComponentMapper INSTANCE = Mappers.getMapper(ComponentMapper.class);
+
+    @Mapping(target = "application", source = "application.id")
+    ComponentDTO toDto(Component component);
+
+    @Mapping(target = "application.id", source = "application")
+    @Mapping(target = "componentComponentVersions", ignore = true)
+    @Mapping(target = "created", ignore = true)
+    Component toEntity(ComponentDTO dto);
+}
+
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 
@@ -6,41 +24,39 @@ import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class ApplicationMapperTest {
+class ComponentMapperTest {
 
-    private final ApplicationMapper mapper = Mappers.getMapper(ApplicationMapper.class);
+    private final ComponentMapper mapper = Mappers.getMapper(ComponentMapper.class);
 
     @Test
     void shouldMapEntityToDto() {
         Application app = new Application();
-        app.setId(1L);
-        app.setName("MyApp");
-        app.setCreated(Instant.now());
+        app.setId(42L);
 
-        ApplicationDTO dto = mapper.toDto(app);
+        Component component = new Component();
+        component.setId(1L);
+        component.setComponentName("API Service");
+        component.setApplication(app);
+        component.setCreated(Instant.now());
 
-        assertEquals(app.getId(), dto.getId());
-        assertEquals(app.getName(), dto.getName());
-        assertEquals(app.getCreated(), dto.getCreated());
+        ComponentDTO dto = mapper.toDto(component);
+
+        assertEquals(component.getId(), dto.getId());
+        assertEquals(component.getComponentName(), dto.getComponentName());
+        assertEquals(42L, dto.getApplication());
     }
 
     @Test
     void shouldMapDtoToEntity() {
-        ApplicationDTO dto = new ApplicationDTO("MyApp");
-        dto.setId(1L);
-        dto.setCreated(Instant.now());
+        ComponentDTO dto = new ComponentDTO("Database", 88L);
+        dto.setId(5L);
 
-        Application app = mapper.toEntity(dto);
+        Component component = mapper.toEntity(dto);
 
-        assertEquals(dto.getId(), app.getId());
-        assertEquals(dto.getName(), app.getName());
-        assertEquals(dto.getCreated(), app.getCreated());
-
-        // Ensure ignored relationships are null or empty
-        assertNull(app.getAppTestClasses());
-        assertNull(app.getTestLaunches());
-        assertNull(app.getAppTestFeatures());
-        assertNull(app.getApplicationComponents());
+        assertEquals(dto.getId(), component.getId());
+        assertEquals("Database", component.getComponentName());
+        assertNotNull(component.getApplication());
+        assertEquals(88L, component.getApplication().getId());
     }
 }
 ```
