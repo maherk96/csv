@@ -1,27 +1,46 @@
 ```java
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
+import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 
-@Mapper(componentModel = "spring")
-public interface ApplicationMapper {
+import java.time.Instant;
 
-    ApplicationMapper INSTANCE = Mappers.getMapper(ApplicationMapper.class);
+import static org.junit.jupiter.api.Assertions.*;
 
-    // Map entity to DTO
-    @Mapping(target = "id", source = "id")
-    @Mapping(target = "created", source = "created")
-    @Mapping(target = "name", source = "name")
-    ApplicationDTO toDto(Application app);
+class ApplicationMapperTest {
 
-    // Map DTO to entity
-    @Mapping(target = "id", source = "id")
-    @Mapping(target = "created", source = "created")
-    @Mapping(target = "name", source = "name")
-    @Mapping(target = "appTestClasses", ignore = true)
-    @Mapping(target = "testLaunches", ignore = true)
-    @Mapping(target = "appTestFeatures", ignore = true)
-    @Mapping(target = "applicationComponents", ignore = true)
-    Application toEntity(ApplicationDTO dto);
+    private final ApplicationMapper mapper = Mappers.getMapper(ApplicationMapper.class);
+
+    @Test
+    void shouldMapEntityToDto() {
+        Application app = new Application();
+        app.setId(1L);
+        app.setName("MyApp");
+        app.setCreated(Instant.now());
+
+        ApplicationDTO dto = mapper.toDto(app);
+
+        assertEquals(app.getId(), dto.getId());
+        assertEquals(app.getName(), dto.getName());
+        assertEquals(app.getCreated(), dto.getCreated());
+    }
+
+    @Test
+    void shouldMapDtoToEntity() {
+        ApplicationDTO dto = new ApplicationDTO("MyApp");
+        dto.setId(1L);
+        dto.setCreated(Instant.now());
+
+        Application app = mapper.toEntity(dto);
+
+        assertEquals(dto.getId(), app.getId());
+        assertEquals(dto.getName(), app.getName());
+        assertEquals(dto.getCreated(), app.getCreated());
+
+        // Ensure ignored relationships are null or empty
+        assertNull(app.getAppTestClasses());
+        assertNull(app.getTestLaunches());
+        assertNull(app.getAppTestFeatures());
+        assertNull(app.getApplicationComponents());
+    }
 }
 ```
