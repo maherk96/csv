@@ -1,87 +1,50 @@
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.task.TaskExecutor;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import org.springframework.stereotype.Service;
+```java
+private static StatusSummary summariseStatuses(List<QAPAbstractTestCase> cases) {
+    EnumMap<TestcaseStatus, Long> counts = cases.stream()
+        .collect(Collectors.groupingBy(
+                QAPAbstractTestCase::getStatus,
+                () -> new EnumMap<>(TestcaseStatus.class),
+                Collectors.counting()));
 
-import javax.annotation.PreDestroy;
-import java.util.EventQueue;
-
-@Service
-public class CucumberTestDataProcessor extends BaseTestDataProcessor<QAPCucumberLaunch> {
-
-    private final EventQueue<QAPCucumberLaunch> dataQueue;
-    private final TaskExecutor taskExecutor;
-
-    private final ApplicationService appService;
-    private final EnvironmentService envService;
-    private final UserService userService;
-    private final TestRunService testRunService;
-    private final TestService testService;
-    private final LogService logService;
-    private final FixService fixService;
-    private final ExceptionService exceptionService;
-    private final TestLaunchService testLaunchService;
-    private final TestClassService testClassService;
-    private final TestFeatureService testFeatureService;
-    private final TestTagService testTagService;
-    private final TestParamService testParamService;
-
-    @Autowired
-    public CucumberTestDataProcessor(
-        EventQueue<QAPCucumberLaunch> dataQueue,
-        TaskExecutor taskExecutor,
-        ApplicationService appService,
-        EnvironmentService envService,
-        UserService userService,
-        TestRunService testRunService,
-        TestService testService,
-        LogService logService,
-        FixService fixService,
-        ExceptionService exceptionService,
-        TestLaunchService testLaunchService,
-        TestClassService testClassService,
-        TestFeatureService testFeatureService,
-        TestTagService testTagService,
-        TestParamService testParamService
-    ) {
-        this.dataQueue = dataQueue;
-        this.taskExecutor = taskExecutor;
-        this.appService = appService;
-        this.envService = envService;
-        this.userService = userService;
-        this.testRunService = testRunService;
-        this.testService = testService;
-        this.logService = logService;
-        this.fixService = fixService;
-        this.exceptionService = exceptionService;
-        this.testLaunchService = testLaunchService;
-        this.testClassService = testClassService;
-        this.testFeatureService = testFeatureService;
-        this.testTagService = testTagService;
-        this.testParamService = testParamService;
-
-        processData(); // Start processing immediately
-    }
-
-    @Override
-    public void processData() {
-        doProcess(dataQueue, taskExecutor, this::processTestReportData);
-    }
-
-    @Override
-    public void processTestReportData(QAPCucumberLaunch testData) {
-        validateTestData(testData);
-        logService.logInfo("Processing test report for " + testData);
-        // Continue with your real logic...
-    }
-
-    @Override
-    public void validateTestData(QAPCucumberLaunch testData) {
-        // Custom validation logic
-    }
-
-    @PreDestroy
-    public void shutdown() {
-        super.shutdown(taskExecutor);
-    }
+    return new StatusSummary(
+            counts.getOrDefault(TestcaseStatus.PASSED,   0L).intValue(),
+            counts.getOrDefault(TestcaseStatus.FAILED,   0L).intValue(),
+            counts.getOrDefault(TestcaseStatus.ABORTED,  0L).intValue(),
+            counts.getOrDefault(TestcaseStatus.DISABLED, 0L).intValue(),
+            counts.getOrDefault(TestcaseStatus.IGNORED,  0L).intValue());
 }
+
+/** Tiny helper record – Java 16+ */
+private record StatusSummary(int passed, int failed, int aborted,
+                             int disabled, int ignored) {
+    int total() { return passed + failed + aborted + disabled + ignored; }
+}
+private TestLaunchDtoBuilder populateCommonFields(QAPHeader launch,
+                                                  StatusSummary s,
+                                                  long app, long user, long env) {
+    return TestLaunchDto.builder()
+            .total(s.total())
+            .passed(s.passed).failed(s.failed).aborted(s.aborted)
+            .disabled(s.disabled).ignored(s.ignored)
+            .launchUuid(launch.getLaunchId())
+            .ciBranch(launch.getBranch())
+            .regression(launch.isRegression())
+            .app(app).user(user).env(env)
+            .startTime(convertInstantToOffsetDateTime(launch.getLaunchStartTime()))
+            .endTime(convertInstantToOffsetDateTime(launch.getLaunchEndTime()))
+            .jdkVersion(launch.getJdkVersion())
+            .osVersion(launch.getOsVersion())
+            .testRunnerVersion(launch.getTestRunnerVersion());
+}
+
+private Long createLaunch(QAPHeader launch,
+                          List<QAPAbstractTestCase> cases,
+                          long app, long user, long env,
+                          Consumer<TestLaunchDtoBuilder> extra) {
+
+    StatusSummary s = summariseStatuses(cases);
+    TestLaunchDtoBuilder builder = populateCommonFields(launch, s, app, user, env);
+    extra.accept(builder);               // e.g. b -> b.testClass(id)  OR  b -> b.testFeature(id)
+    return create(builder.build());
+}
+```
