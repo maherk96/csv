@@ -1,35 +1,27 @@
 ```java
-import org.junit.jupiter.api.Test;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
-import static org.junit.jupiter.api.Assertions.*;
+@Mapper(componentModel = "spring")
+public interface ApplicationMapper {
 
-class ExceptionMapperTest {
+    ApplicationMapper INSTANCE = Mappers.getMapper(ApplicationMapper.class);
 
-    private final ExceptionMapper mapper = Mappers.getMapper(ExceptionMapper.class);
+    // Map entity to DTO
+    @Mapping(target = "id", source = "id")
+    @Mapping(target = "created", source = "created")
+    @Mapping(target = "name", source = "name")
+    ApplicationDTO toDto(Application app);
 
-    @Test
-    void shouldMapEntityToDto() {
-        Exception entity = new Exception();
-        entity.setId(1L);
-        entity.setException("oops".getBytes());
-
-        ExceptionDTO dto = mapper.toDto(entity);
-
-        assertEquals(1L, dto.getId());
-        assertArrayEquals("oops".getBytes(), dto.getException());
-    }
-
-    @Test
-    void shouldMapDtoToEntity() {
-        ExceptionDTO dto = new ExceptionDTO();
-        dto.setId(2L);
-        dto.setException("whoops".getBytes());
-
-        Exception entity = mapper.toEntity(dto);
-
-        assertEquals(2L, entity.getId());
-        assertArrayEquals("whoops".getBytes(), entity.getException());
-    }
+    // Map DTO to entity
+    @Mapping(target = "id", source = "id")
+    @Mapping(target = "created", source = "created")
+    @Mapping(target = "name", source = "name")
+    @Mapping(target = "appTestClasses", ignore = true)
+    @Mapping(target = "testLaunches", ignore = true)
+    @Mapping(target = "appTestFeatures", ignore = true)
+    @Mapping(target = "applicationComponents", ignore = true)
+    Application toEntity(ApplicationDTO dto);
 }
 ```
