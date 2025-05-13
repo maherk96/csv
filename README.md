@@ -1,61 +1,37 @@
 ```java
-import java.util.*; // Wildcard import (used)
-import java.util.logging.Logger; // Fully qualified from java.util.logging — defeats the wildcard above
-import java.text.SimpleDateFormat; // ❌ Unused
-import java.io.File; // ❌ Unused
-import static java.lang.Math.*; // ❌ Unused wildcard static import
+-- CucumberTestLaunchDataQuery
+SELECT 
+    f.FEATURE_NAME         AS featureName,
+    t.DISPLAY_NAME         AS scenarioName,
+    ts.STEP_NAME           AS stepName,
+    ts.STATUS              AS stepStatus,
+    tp.TEST_PARAMS         AS testParams,
+    tc.NAME                AS testClassName,
+    tr.STATUS              AS scenarioStatus,
+    u.NAME                 AS userName,
+    a.NAME                 AS appName,
+    e.NAME                 AS envName,
+    f2.FIX                 AS fix,
+    l.log                  AS log,
+    e2."EXCEPTION"         AS exception,
+    tl.LAUNCH_ID           AS launchId,
+    tr.START_TIME          AS startTime,
+    tr.END_TIME            AS endTime
 
-public class UserService {
+FROM TEST_LAUNCH tl
+INNER JOIN TEST_RUN tr          ON tl.ID = tr.TEST_LAUNCH_ID
+INNER JOIN TEST t              ON tr.TEST_ID = t.ID
+INNER JOIN TEST_CLASS tc       ON t.TEST_CLASS_ID = tc.ID
+INNER JOIN TEST_FEATURE f      ON t.TEST_FEATURE_ID = f.ID
+LEFT JOIN TEST_PARAM tp        ON t.ID = tp.TEST_ID AND tl.ID = tp.TEST_LAUNCH_ID
+LEFT JOIN TEST_STEP ts         ON ts.TEST_ID = t.ID
+INNER JOIN USERS u             ON tl.USER_ID = u.ID
+INNER JOIN APPLICATION a       ON tl.APP_ID = a.ID
+INNER JOIN ENVIRONMENTS e      ON tl.ENV_ID = e.ID
+LEFT JOIN LOG l                ON tr.LOG_ID = l.ID
+LEFT JOIN "EXCEPTION" e2       ON tr.EXCEPTION_ID = e2.ID
+LEFT JOIN FIX f2               ON tr.FIX_ID = f2.ID
 
-    private static final Logger logger = Logger.getLogger("UserService");
-
-    private List<String> users = new ArrayList<>();
-    private Map<String, Integer> loginAttempts = new HashMap<>();
-    private int maxLoginAttempts = 3;
-
-    public void addUser(String username) {
-        if (username == null || username.isEmpty())
-            logger.info("Invalid username, cannot add.");
-        users.add(username);
-        logger.info("User added: " + username);
-    }
-
-    public boolean login(String username) {
-        if (!users.contains(username)) {
-            logger.warning("Login failed: user does not exist.");
-            return false;
-        }
-
-        int attempts = loginAttempts.getOrDefault(username, 0);
-        if (attempts > maxLoginAttempts) {
-            logger.warning("User " + username + " is locked out.");
-            return false;
-        }
-
-        logger.info("Login successful for user: " + username);
-        loginAttempts.put(username, attempts + 1); // ❌ should only happen on failed login
-        return true;
-    }
-
-    public void resetPassword(String username) {
-        logger.info("Resetting password for user: " + username);
-        if (!users.contains(username)) {
-            logger.info("User not found.");
-        }
-        // Reset logic not implemented
-    }
-
-    public void deleteUser(String username) {
-        if (users.remove(username)) {
-            logger.info("User deleted: " + username);
-        } else {
-            logger.warning("Failed to delete: user not found.");
-        }
-    }
-
-    public List<String> getAllUsers() {
-        return users; // ❌ returns internal list directly
-    }
-}
-
+WHERE tl.LAUNCH_ID = ?
+ORDER BY f.FEATURE_NAME, t.DISPLAY_NAME, ts.ID ASC;
 ```
