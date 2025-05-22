@@ -1,36 +1,48 @@
-# QA Middleware Messaging
+```java
+public class SolaceConfig {
+    public String host;
+    public String username;
+    public String password;
+    public String vpnname;
+}
 
-This project provides messaging components including **producers** and **subscribers** for two major messaging technologies:
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
-- **Solace**
-- **Tibco Rendezvous (TibRv)**
+import java.io.File;
+import java.io.IOException;
 
-These components are designed to support message publishing and consumption in a QA or integration testing context.
+public class SolaceConfigLoader {
 
----
+    public static SolaceConfig loadConfig(String path) {
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        try {
+            return mapper.readValue(new File(path), SolaceConfigWrapper.class).solace;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load Solace config from YAML", e);
+        }
+    }
 
-## 📁 Project Structure
+    static class SolaceConfigWrapper {
+        public SolaceConfig solace;
+    }
+}
 
-- `/solace`: Contains Solace-specific messaging implementations.
-- `/tibrv`: Contains Tibco Rendezvous-specific messaging implementations.
-- `build.gradle`, `settings.gradle`: Gradle build configuration files.
-- `pipeline.yaml`: CI/CD pipeline definition.
-- `README.md`: This file.
+public void send(String topicName, String messageContent) {
+    SolaceConfig config = SolaceConfigLoader.loadConfig("solace-config.yaml");
 
----
+    producer = new SolaceMessageProducer(
+        config.host, config.username, config.password, config.vpnname
+    );
 
-## 📦 Modules
+    try {
+        producer.send(topicName, new Message(messageContent));
+    } catch (MessageProducerException e) {
+        throw new RuntimeException("Failed to send message", e);
+    }
 
-Each module includes its own implementation of message producers and subscribers, along with custom exceptions and utility classes. Please refer to the **README inside each module** for detailed instructions on usage:
+    log.debug("Sent to logging to QAP reporting service: {} {}", 
+              System.getProperty(SYSTEM_PROPERTY_LAUNCH_ID), topicName);
+}
 
-- [Solace Module README](./solace/README.md)
-- [TibRv Module README](./tibrv/README.md)
-
----
-
-## 🛠️ Getting Started
-
-This is a Gradle-based project. To build the project:
-
-```bash
-./gradlew build
+```
