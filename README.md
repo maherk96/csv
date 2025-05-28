@@ -7,6 +7,8 @@
 )
 public class QAPLog4jAppender extends AbstractAppender {
 
+    private static final ThreadLocal<Boolean> isLogging = ThreadLocal.withInitial(() -> false);
+
     private final TestDataPublisher testDataPublisher = new TestDataPublisher(false);
     private final QAPPPropertiesLoader propertiesLoader = new QAPPPropertiesLoader();
 
@@ -18,51 +20,52 @@ public class QAPLog4jAppender extends AbstractAppender {
     public static QAPLog4jAppender createAppender(
         @PluginAttribute("name") String name,
         @PluginElement("filter") Filter filter,
-        @PluginElement("layout") Layout<? extends Serializable> layout) {
+        @PluginElement("layout") Layout<? extends Serializable> layout
+    ) {
         return new QAPLog4jAppender(name, filter, layout);
     }
 
     @Override
     public void append(LogEvent event) {
-        if (isInternal(event.getLoggerName())) {
-            return; // Skip logging to prevent recursion
-        }
-
-        if (getLayout() != null) {
-            String formatted = new String(getLayout().toByteArray(event), StandardCharsets.UTF_8);
-            testDataPublisher.publish(
-                RunEnvironment.valueOf(propertiesLoader.getRunEnvironment()), formatted);
+        // Prevent recursion by logger name or thread-local
+        if (isLogging.get() || Util.isInternal(event.getLoggerName())) {
             return;
         }
 
-        // Build fallback log
-        StringBuilder fallback = new StringBuilder()
-            .append(Instant.ofEpochMilli(event.getTimeMillis()))
-            .append(" [").append(Thread.currentThread().getName()).append("] ")
-            .append(event.getLoggerName()).append(" ")
-            .append(event.getLevel()).append(" ")
-            .append(event.getMessage().getFormattedMessage());
+        try {
+            isLogging.set(true);
 
-        Throwable thrown = event.getThrown();
-        if (thrown != null) {
-            StringWriter sw = new StringWriter();
-            thrown.printStackTrace(new PrintWriter(sw));
-            testDataPublisher.publish(
-                RunEnvironment.valueOf(propertiesLoader.getRunEnvironment()), fallback.toString());
-            testDataPublisher.publish(
-                RunEnvironment.valueOf(propertiesLoader.getRunEnvironment()), sw.toString());
-        } else {
-            testDataPublisher.publish(
-                RunEnvironment.valueOf(propertiesLoader.getRunEnvironment()), fallback.toString());
+            if (getLayout() != null) {
+                String formatted = new String(getLayout().toByteArray(event), StandardCharsets.UTF_8);
+                testDataPublisher.publish(
+                    RunEnvironment.valueOf(propertiesLoader.getRunEnvironment()), formatted
+                );
+                return;
+            }
+
+            // fallback log formatting
+            StringBuilder fallback = new StringBuilder()
+                .append(Instant.ofEpochMilli(event.getTimeMillis())).append(" [")
+                .append(Thread.currentThread().getName()).append("] ")
+                .append(event.getLoggerName()).append(" ")
+                .append(event.getLevel()).append(" ")
+                .append(event.getMessage().getFormattedMessage());
+
+            Throwable thrown = event.getThrown();
+            if (thrown != null) {
+                StringWriter sw = new StringWriter();
+                thrown.printStackTrace(new PrintWriter(sw));
+                testDataPublisher.publish(
+                    RunEnvironment.valueOf(propertiesLoader.getRunEnvironment()), fallback.toString());
+                testDataPublisher.publish(
+                    RunEnvironment.valueOf(propertiesLoader.getRunEnvironment()), sw.toString());
+            } else {
+                testDataPublisher.publish(
+                    RunEnvironment.valueOf(propertiesLoader.getRunEnvironment()), fallback.toString());
+            }
+        } finally {
+            isLogging.set(false);
         }
-    }
-
-    private boolean isInternal(String loggerName) {
-        return loggerName != null && (
-            loggerName.startsWith("com.citi.fx.qa.qap.data.publisher") ||
-            loggerName.startsWith("QAPLog4jAppender") ||
-            loggerName.contains("TestDataPublisher")
-        );
     }
 }
 
