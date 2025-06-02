@@ -1,3 +1,4 @@
+```sql
 SELECT 
     ts.STEP_NAME AS stepName,
     tsr.STATUS AS stepStatus,
@@ -29,13 +30,10 @@ LEFT JOIN LOG l ON tr.LOG_ID = l.ID
 LEFT JOIN EXCEPTION e3 ON tr.EXCEPTION_ID = e3.ID
 LEFT JOIN FIX f ON tr.FIX_ID = f.ID
 
--- ✅ Correct step joins
 LEFT JOIN TEST_STEP_RUN tsr ON tsr.TEST_RUN_ID = tr.ID
 LEFT JOIN TEST_STEP ts ON ts.ID = tsr.TEST_STEP_ID
 LEFT JOIN EXCEPTION e2 ON tsr.EXCEPTION_ID = e2.ID
 LEFT JOIN TEST_STEP_DATA tsd ON tsd.TEST_STEP_ID = ts.ID
-
--- ✅ Filter by launch ID (string, not numeric)
 WHERE tl.LAUNCH_ID = 'TestLaunch_186b9f5f-7533-4084-bc39'
-
 ORDER BY tr.END_TIME DESC, tsr.ID;
+```
