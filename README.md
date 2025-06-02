@@ -1,51 +1,43 @@
 ```java
-private <T> T resolveReference(
-    Supplier<String> idSupplier,
-    Function<String, T> cacheGetter,
-    Function<String, Optional<T>> dbFetcher,
-    String label
-) {
-    String id = idSupplier.get();
-    if (id == null) return null;
-    
-    T cached = cacheGetter.apply(id);
-    if (cached != null) return cached;
-
-    return dbFetcher.apply(id)
-        .orElseThrow(() -> new NotFoundException(String.format("%s %s was not found", label, id)));
-}
-
-private TestStepRun mapToEntity(final TestStepRunDTO testStepRunDTO, final TestStepRun testStepRun) {
+private void mapToEntity(final TestRunDTO testRunDTO, final TestRun testRun) {
     var exceptionCache = ExceptionCache.getInstance();
     var fixCache = FixCache.getInstance();
     var logCache = LogCache.getInstance();
 
-    testStepRun.setCreated(testStepRunDTO.getCreated());
-    testStepRun.setEndTime(testStepRunDTO.getEndTime());
-    testStepRun.setStartTime(testStepRunDTO.getStartTime());
-    testStepRun.setStatus(testStepRunDTO.getStatus());
+    testRun.setStartTime(testRunDTO.getStartTime());
+    testRun.setEndTime(testRunDTO.getEndTime());
+    testRun.setStatus(testRunDTO.getStatus());
+    testRun.setCreated(testRunDTO.getCreated());
 
-    testStepRun.setException(resolveReference(
-        testStepRunDTO::getException,
+    testRun.setException(resolveReference(
+        testRunDTO::getException,
         exceptionCache::get,
-        id -> exceptionRepository.findById(id),
+        exceptionRepository::findById,
         "Exception"
     ));
 
-    testStepRun.setFix(resolveReference(
-        testStepRunDTO::getFix,
+    testRun.setFix(resolveReference(
+        testRunDTO::getFix,
         fixCache::get,
-        id -> fixRepository.findById(id),
+        fixRepository::findById,
         "Fix"
     ));
 
-    testStepRun.setLog(resolveReference(
-        testStepRunDTO::getLog,
+    testRun.setLog(resolveReference(
+        testRunDTO::getLog,
         logCache::get,
-        id -> logRepository.findById(id),
-        "Logs"
+        logRepository::findById,
+        "Log"
     ));
 
-    return testStepRun;
+    final var test = testRunDTO.getTest() == null
+        ? null
+        : testCachedService.getTestById(testRunDTO.getTest());
+    testRun.setTest(test);
+
+    final var testLaunch = testRunDTO.getTestLaunch() == null
+        ? null
+        : testLaunchCachedService.getLaunchById(testRunDTO.getTestLaunch());
+    testRun.setTestLaunch(testLaunch);
 }
 ```
