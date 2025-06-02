@@ -1,43 +1,40 @@
 ```java
-private void mapToEntity(final TestRunDTO testRunDTO, final TestRun testRun) {
-    var exceptionCache = ExceptionCache.getInstance();
-    var fixCache = FixCache.getInstance();
-    var logCache = LogCache.getInstance();
+SELECT 
+    ts.STEP_NAME AS stepName,
+    tsr.STATUS AS stepStatus,
+    t.DISPLAY_NAME AS scenarioName,
+    f.FEATURE_NAME AS featureName,
+    f.FEATURE_DESCRIPTION AS featureDescription,
+    tr.STATUS AS scenarioStatus,
+    u.NAME AS userName,
+    a.NAME AS appName,
+    e.NAME AS envName,
+    tr.FIX_ID AS fix,
+    tr.LOG_ID AS log,
+    e2."EXCEPTION" AS stepException,
+    e3."EXCEPTION" AS scenarioException,
+    tl.LAUNCH_ID AS launchId,
+    tr.START_TIME AS startTime,
+    tr.END_TIME AS endTime,
+    tsd.KEY_NAME AS dataKey,
+    tsd.VALUE AS dataValue
+FROM TEST_LAUNCH tl
+INNER JOIN TEST_RUN tr ON tl.ID = tr.TEST_LAUNCH_ID
+INNER JOIN TEST t ON tr.TEST_ID = t.ID
+INNER JOIN TEST_FEATURE f ON t.TEST_FEATURE_ID = f.ID
+INNER JOIN USERS u ON tl.USER_ID = u.ID
+INNER JOIN APPLICATION a ON tl.APP_ID = a.ID
+INNER JOIN ENVIRONMENTS e ON e.ID = tl.ENV_ID
+LEFT JOIN LOG l ON tr.LOG_ID = l.ID
+LEFT JOIN EXCEPTION e3 ON tr.EXCEPTION_ID = e3.ID
+LEFT JOIN FIX f ON tr.FIX_ID = f.ID
 
-    testRun.setStartTime(testRunDTO.getStartTime());
-    testRun.setEndTime(testRunDTO.getEndTime());
-    testRun.setStatus(testRunDTO.getStatus());
-    testRun.setCreated(testRunDTO.getCreated());
+-- ✅ Join test step run and related step + data
+LEFT JOIN TEST_STEP_RUN tsr ON tsr.TEST_RUN_ID = tr.ID
+LEFT JOIN TEST_STEP ts ON ts.ID = tsr.TEST_STEP_ID
+LEFT JOIN EXCEPTION e2 ON tsr.EXCEPTION_ID = e2.ID
+LEFT JOIN TEST_STEP_DATA tsd ON tsd.TEST_STEP_ID = ts.ID
 
-    testRun.setException(resolveReference(
-        testRunDTO::getException,
-        exceptionCache::get,
-        exceptionRepository::findById,
-        "Exception"
-    ));
-
-    testRun.setFix(resolveReference(
-        testRunDTO::getFix,
-        fixCache::get,
-        fixRepository::findById,
-        "Fix"
-    ));
-
-    testRun.setLog(resolveReference(
-        testRunDTO::getLog,
-        logCache::get,
-        logRepository::findById,
-        "Log"
-    ));
-
-    final var test = testRunDTO.getTest() == null
-        ? null
-        : testCachedService.getTestById(testRunDTO.getTest());
-    testRun.setTest(test);
-
-    final var testLaunch = testRunDTO.getTestLaunch() == null
-        ? null
-        : testLaunchCachedService.getLaunchById(testRunDTO.getTestLaunch());
-    testRun.setTestLaunch(testLaunch);
-}
+WHERE tl.LAUNCH_ID = 'TestLaunch_2c0fe289-65f2-4df9-b81c'
+ORDER BY tr.END_TIME DESC, tsr.ID;
 ```
