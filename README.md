@@ -1,91 +1,70 @@
-```sql
+```java
+/**
+ * Processes a list of test steps for a given scenario and test run.
+ *
+ * @param steps      The list of steps associated with the scenario
+ * @param testId     The ID of the parent test (TEST.ID)
+ * @param scenario   The scenario being executed
+ * @param testRunId  The ID of the associated test run (TEST_RUN.ID)
+ */
+private void processTestSteps(List<QAPStep> steps, long testId, QAPScenario scenario, long testRunId) {
+    if (steps == null || steps.isEmpty()) return;
 
+    steps.forEach(step -> {
+        log.info("Processing test step [{}] for scenario [{}]",
+                step.getStepName(), scenario.getScenarioName());
 
-✅ Step 1: Get the TEST_LAUNCH.ID for the given LAUNCH_ID
+        long testStepId = registry.testStepCachedService.getOrCreateTestStepDetails(step.getStepName(), testId);
 
-SELECT ID FROM TEST_LAUNCH 
-WHERE LAUNCH_ID = 'TestLaunch_e52153c7-a70c-4817-96a6';
+        createStepRun(step, scenario, testStepId, testRunId);
+        createStepData(step, testStepId);
+    });
+}
 
-✅ Step 2: Get all TEST_RUN.IDs for that launch
+/**
+ * Persists a single test step execution (TEST_STEP_RUN).
+ *
+ * @param step        The step that was executed
+ * @param scenario    The parent scenario
+ * @param testStepId  The ID of the related step definition (TEST_STEP.ID)
+ * @param testRunId   The ID of the scenario run (TEST_RUN.ID)
+ */
+private void createStepRun(QAPStep step, QAPScenario scenario, long testStepId, long testRunId) {
+    var stepRunDTO = new TestStepRunDTO();
 
-SELECT ID FROM TEST_RUN 
-WHERE TEST_LAUNCH_ID = (
-    SELECT ID FROM TEST_LAUNCH 
-    WHERE LAUNCH_ID = 'TestLaunch_e52153c7-a70c-4817-96a6'
-);
+    // These can be updated later with actual timing
+    stepRunDTO.setStartTime(null); // TODO: Capture actual step start time
+    stepRunDTO.setEndTime(null);   // TODO: Capture actual step end time
 
+    stepRunDTO.setStatus(ConversionUtil.mapTestCaseStatus(scenario.name()));
+    stepRunDTO.setTestStep(testStepId);
+    stepRunDTO.setTestRun(testRunId);
 
-✅ Step 3: Get all TEST_STEP_RUNs for those test runs
+    if (TestCaseStatus.FAILED.name().equals(step.getStatus())) {
+        stepRunDTO.setException(registry.exceptionService.createExceptionForTestCase(scenario));
+    }
 
-SELECT * FROM TEST_STEP_RUN 
-WHERE TEST_RUN_ID IN (
-    SELECT ID FROM TEST_RUN 
-    WHERE TEST_LAUNCH_ID = (
-        SELECT ID FROM TEST_LAUNCH 
-        WHERE LAUNCH_ID = 'TestLaunch_e52153c7-a70c-4817-96a6'
-    )
-);
+    registry.testStepRunService.create(stepRunDTO);
+}
 
+/**
+ * Persists key-value data associated with a step (TEST_STEP_DATA).
+ *
+ * @param step        The step that may contain a data table
+ * @param testStepId  The ID of the related step definition (TEST_STEP.ID)
+ */
+private void createStepData(QAPStep step, long testStepId) {
+    if (step.getDataTable() == null || step.getDataTable().isEmpty()) return;
 
-✅ Step 4: Get all TEST_STEPs used in those step runs
+    step.getDataTable().forEach(dataRow ->
+        dataRow.forEach((key, value) -> {
+            var testStepDTO = new TestStepDataDTO();
+            testStepDTO.setTestStep(testStepId);
+            testStepDTO.setKeyName(key);
+            testStepDTO.setValue(value);
 
-SELECT * FROM TEST_STEP 
-WHERE ID IN (
-    SELECT TEST_STEP_ID 
-    FROM TEST_STEP_RUN 
-    WHERE TEST_RUN_ID IN (
-        SELECT ID FROM TEST_RUN 
-        WHERE TEST_LAUNCH_ID = (
-            SELECT ID FROM TEST_LAUNCH 
-            WHERE LAUNCH_ID = 'TestLaunch_e52153c7-a70c-4817-96a6'
-        )
-    )
-);
-
-✅ Step 5: Get all TEST_STEP_DATA linked to those steps
-
-SELECT * FROM TEST_STEP_DATA 
-WHERE TEST_STEP_ID IN (
-    SELECT ID FROM TEST_STEP 
-    WHERE ID IN (
-        SELECT TEST_STEP_ID 
-        FROM TEST_STEP_RUN 
-        WHERE TEST_RUN_ID IN (
-            SELECT ID FROM TEST_RUN 
-            WHERE TEST_LAUNCH_ID = (
-                SELECT ID FROM TEST_LAUNCH 
-                WHERE LAUNCH_ID = 'TestLaunch_e52153c7-a70c-4817-96a6'
-            )
-        )
-    )
-);
-
-
-✅ Step 6: One-shot full diagnostic query
-
-SELECT 
-    tl.ID AS launch_id,
-    tr.ID AS test_run_id,
-    ts.ID AS test_step_id,
-    tsr.ID AS test_step_run_id,
-    tsd.ID AS step_data_id,
-    ts.STEP_NAME,
-    tsd.KEY_NAME,
-    tsd.KEY_VALUE
-FROM TEST_LAUNCH tl
-JOIN TEST_RUN tr ON tr.TEST_LAUNCH_ID = tl.ID
-LEFT JOIN TEST_STEP_RUN tsr ON tsr.TEST_RUN_ID = tr.ID
-LEFT JOIN TEST_STEP ts ON ts.ID = tsr.TEST_STEP_ID
-LEFT JOIN TEST_STEP_DATA tsd ON tsd.TEST_STEP_ID = ts.ID
-WHERE tl.LAUNCH_ID = 'TestLaunch_e52153c7-a70c-4817-96a6';
-
-
-
-Table	What You Should See
-TEST_RUN	At least one row returned
-TEST_STEP_RUN	Rows with TEST_RUN_ID matching step run
-TEST_STEP	Rows with STEP_NAME
-TEST_STEP_DATA	Rows with KEY_NAME, KEY_VALUE
-Diagnostic query	All columns populated (step + status + data)
-
+            registry.testStepDataService.create(testStepDTO);
+        })
+    );
+}
 ```
