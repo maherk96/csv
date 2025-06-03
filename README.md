@@ -1,70 +1,36 @@
 ```java
 /**
- * Processes a list of test steps for a given scenario and test run.
+ * Extracts the data table arguments from a test step, if present, and adds rowIndex to each row.
  *
- * @param steps      The list of steps associated with the scenario
- * @param testId     The ID of the parent test (TEST.ID)
- * @param scenario   The scenario being executed
- * @param testRunId  The ID of the associated test run (TEST_RUN.ID)
+ * @param testStep the Cucumber test step object which may contain a data table.
+ * @return a list of maps representing the rows of the data table, including rowIndex for each row.
  */
-private void processTestSteps(List<QAPStep> steps, long testId, QAPScenario scenario, long testRunId) {
-    if (steps == null || steps.isEmpty()) return;
-
-    steps.forEach(step -> {
-        log.info("Processing test step [{}] for scenario [{}]",
-                step.getStepName(), scenario.getScenarioName());
-
-        long testStepId = registry.testStepCachedService.getOrCreateTestStepDetails(step.getStepName(), testId);
-
-        createStepRun(step, scenario, testStepId, testRunId);
-        createStepData(step, testStepId);
-    });
-}
-
-/**
- * Persists a single test step execution (TEST_STEP_RUN).
- *
- * @param step        The step that was executed
- * @param scenario    The parent scenario
- * @param testStepId  The ID of the related step definition (TEST_STEP.ID)
- * @param testRunId   The ID of the scenario run (TEST_RUN.ID)
- */
-private void createStepRun(QAPStep step, QAPScenario scenario, long testStepId, long testRunId) {
-    var stepRunDTO = new TestStepRunDTO();
-
-    // These can be updated later with actual timing
-    stepRunDTO.setStartTime(null); // TODO: Capture actual step start time
-    stepRunDTO.setEndTime(null);   // TODO: Capture actual step end time
-
-    stepRunDTO.setStatus(ConversionUtil.mapTestCaseStatus(scenario.name()));
-    stepRunDTO.setTestStep(testStepId);
-    stepRunDTO.setTestRun(testRunId);
-
-    if (TestCaseStatus.FAILED.name().equals(step.getStatus())) {
-        stepRunDTO.setException(registry.exceptionService.createExceptionForTestCase(scenario));
+public List<Map<String, String>> extractDataTable(TestStep testStep) {
+    if (!(testStep instanceof PickleStepTestStep pickleStep)) {
+        return Collections.emptyList();
     }
 
-    registry.testStepRunService.create(stepRunDTO);
-}
+    if (!(pickleStep.getStep().getArgument() instanceof DataTableArgument dataTableArgument)) {
+        return Collections.emptyList();
+    }
 
-/**
- * Persists key-value data associated with a step (TEST_STEP_DATA).
- *
- * @param step        The step that may contain a data table
- * @param testStepId  The ID of the related step definition (TEST_STEP.ID)
- */
-private void createStepData(QAPStep step, long testStepId) {
-    if (step.getDataTable() == null || step.getDataTable().isEmpty()) return;
+    List<List<String>> rows = dataTableArgument.cells();
+    if (rows == null || rows.isEmpty()) {
+        return Collections.emptyList();
+    }
 
-    step.getDataTable().forEach(dataRow ->
-        dataRow.forEach((key, value) -> {
-            var testStepDTO = new TestStepDataDTO();
-            testStepDTO.setTestStep(testStepId);
-            testStepDTO.setKeyName(key);
-            testStepDTO.setValue(value);
+    List<String> headers = rows.get(0);
 
-            registry.testStepDataService.create(testStepDTO);
+    return IntStream.range(1, rows.size()) // Skip header
+        .mapToObj(i -> {
+            List<String> row = rows.get(i);
+            Map<String, String> rowMap = new LinkedHashMap<>();
+            for (int j = 0; j < row.size(); j++) {
+                rowMap.put(headers.get(j), row.get(j));
+            }
+            rowMap.put("rowIndex", String.valueOf(i - 1)); // 0-based row index
+            return rowMap;
         })
-    );
+        .collect(Collectors.toList());
 }
 ```
