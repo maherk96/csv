@@ -1,35 +1,24 @@
 ```java
 /**
- * Handles the completion of each test step within a scenario by recording step details and any data tables.
+ * Persists key-value data associated with a step (TEST_STEP_DATA).
  *
- * @param event the event indicating the completion of a test step.
+ * @param step        The step that may contain a data table.
+ * @param testStepId  The ID of the related step definition (TEST_STEP.ID).
  */
-private void handleTestStepFinished(TestStepFinished event) {
-    Throwable error = event.getResult().getError();
+private void createStepData(QAPSteps step, long testStepId) {
+    if (step.getDataTable() == null || step.getDataTable().isEmpty()) return;
 
-    // Skip hooks like @Before, @After, etc.
-    if (!(event.getTestStep() instanceof HookTestStep)) {
-
-        // Convert raw table into typed QAPStepRow objects
-        List<QAPStepRow> stepRows = exHelper.extractDataTable(event.getTestStep()).stream()
-            .map(row -> {
-                int rowIndex = Integer.parseInt(row.get("rowIndex"));
-                row.remove("rowIndex"); // Remove from values map
-                return new QAPStepRow(rowIndex, row);
-            })
-            .collect(Collectors.toList());
-
-        // Construct the step entry
-        var qapStep = new QAPSteps(
-            exHelper.extractStepName(event.getTestStep()),
-            event.getResult().getStatus().name(),
-            error != null ? ExceptionUtils.getStackTrace(error) : null,
-            stepRows
-        );
-
-        // Add it to the current scenario
-        currentScenario.get().addStep(qapStep);
-    }
+    step.getDataTable().forEach(dataRow -> {
+        int rowIndex = dataRow.getRowIndex();
+        dataRow.getValues().forEach((key, value) -> {
+            var testStepDTO = new TestStepDataDTO();
+            testStepDTO.setTestStep(testStepId);
+            testStepDTO.setKeyName(key);
+            testStepDTO.setValue(value);
+            testStepDTO.setRowIndex(rowIndex); 
+            registry.testStepDataService.create(testStepDTO);
+        });
+    });
 }
 
 ```
