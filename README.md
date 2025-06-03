@@ -1,36 +1,35 @@
 ```java
 /**
- * Extracts the data table arguments from a test step, if present, and adds rowIndex to each row.
+ * Handles the completion of each test step within a scenario by recording step details and any data tables.
  *
- * @param testStep the Cucumber test step object which may contain a data table.
- * @return a list of maps representing the rows of the data table, including rowIndex for each row.
+ * @param event the event indicating the completion of a test step.
  */
-public List<Map<String, String>> extractDataTable(TestStep testStep) {
-    if (!(testStep instanceof PickleStepTestStep pickleStep)) {
-        return Collections.emptyList();
+private void handleTestStepFinished(TestStepFinished event) {
+    Throwable error = event.getResult().getError();
+
+    // Skip hooks like @Before, @After, etc.
+    if (!(event.getTestStep() instanceof HookTestStep)) {
+
+        // Convert raw table into typed QAPStepRow objects
+        List<QAPStepRow> stepRows = exHelper.extractDataTable(event.getTestStep()).stream()
+            .map(row -> {
+                int rowIndex = Integer.parseInt(row.get("rowIndex"));
+                row.remove("rowIndex"); // Remove from values map
+                return new QAPStepRow(rowIndex, row);
+            })
+            .collect(Collectors.toList());
+
+        // Construct the step entry
+        var qapStep = new QAPSteps(
+            exHelper.extractStepName(event.getTestStep()),
+            event.getResult().getStatus().name(),
+            error != null ? ExceptionUtils.getStackTrace(error) : null,
+            stepRows
+        );
+
+        // Add it to the current scenario
+        currentScenario.get().addStep(qapStep);
     }
-
-    if (!(pickleStep.getStep().getArgument() instanceof DataTableArgument dataTableArgument)) {
-        return Collections.emptyList();
-    }
-
-    List<List<String>> rows = dataTableArgument.cells();
-    if (rows == null || rows.isEmpty()) {
-        return Collections.emptyList();
-    }
-
-    List<String> headers = rows.get(0);
-
-    return IntStream.range(1, rows.size()) // Skip header
-        .mapToObj(i -> {
-            List<String> row = rows.get(i);
-            Map<String, String> rowMap = new LinkedHashMap<>();
-            for (int j = 0; j < row.size(); j++) {
-                rowMap.put(headers.get(j), row.get(j));
-            }
-            rowMap.put("rowIndex", String.valueOf(i - 1)); // 0-based row index
-            return rowMap;
-        })
-        .collect(Collectors.toList());
 }
+
 ```
