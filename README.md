@@ -1,29 +1,44 @@
-```sql
-@Autowired
-private JdbcTemplate jdbcTemplate;
+```xml
+<Configuration status="WARN">
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d [%t] %-5p %c{1} %m%n"/>
+    </Console>
+    <RollingFile name="LogFile"
+                 fileName="../logs/app_current.log"
+                 filePattern="../logs/app-%d{yyyy-MM-dd-HH-mm-ss}-%i.log">
+      <PatternLayout pattern="%d [%t] %-5p %c{1} %m%n"/>
+      <Policies>
+        <OnStartupTriggeringPolicy/>
+        <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+        <SizeBasedTriggeringPolicy size="10MB"/>
+      </Policies>
+    </RollingFile>
+  </Appenders>
 
-public void batchInsertStepData(List<TestStepDataDTO> dtos) {
-    String sql = "INSERT INTO test_step_data " +
-                 "(created, key_name, row_index, test_launch_id, test_step_id, value, id) " +
-                 "VALUES (?, ?, ?, ?, ?, ?, test_step_data_seq.NEXTVAL)";
+  <Loggers>
+    <!-- Hibernate SQL -->
+    <Logger name="org.hibernate.SQL" level="debug" additivity="false">
+      <AppenderRef ref="Console"/>
+      <AppenderRef ref="LogFile"/>
+    </Logger>
 
-    jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
-        @Override
-        public void setValues(PreparedStatement ps, int i) throws SQLException {
-            TestStepDataDTO dto = dtos.get(i);
-            ps.setTimestamp(1, Timestamp.valueOf(LocalDateTime.now())); // or dto.getCreated()
-            ps.setString(2, dto.getKeyName());
-            ps.setInt(3, dto.getRowIndex());
-            ps.setLong(4, dto.getTestLaunch());
-            ps.setLong(5, dto.getTestStep());
-            ps.setString(6, dto.getValue());
-            // Don't set ID — Oracle sequence is handling it
-        }
+    <!-- JdbcTemplate + Param Bindings -->
+    <Logger name="org.springframework.jdbc.core.JdbcTemplate" level="debug" additivity="false">
+      <AppenderRef ref="Console"/>
+      <AppenderRef ref="LogFile"/>
+    </Logger>
 
-        @Override
-        public int getBatchSize() {
-            return dtos.size();
-        }
-    });
-}
+    <Logger name="org.springframework.jdbc.core.StatementCreatorUtils" level="trace" additivity="false">
+      <AppenderRef ref="Console"/>
+      <AppenderRef ref="LogFile"/>
+    </Logger>
+
+    <!-- Root Logger -->
+    <Root level="info">
+      <AppenderRef ref="Console"/>
+      <AppenderRef ref="LogFile"/>
+    </Root>
+  </Loggers>
+</Configuration>
 ```
