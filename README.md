@@ -1,5 +1,1 @@
-I think the candidate shows a good thought process and a strong willingness to learn, which is definitely a positive. However, the fact that she couldn’t write a basic constructor was a bit worrying. If you’re specifically looking for someone with a stronger technical background, I wouldn’t be too confident in her ability to contribute immediately, though she may get up to speed over time with the right support.
 
-It’s also worth pointing out that our framework is quite complex — it’s not front-end focused and we work with niche libraries like QuickFIX, TIBCO RV, and Solace. Debugging and solving dependency issues is a core part of the role, and that requires a certain level of technical fluency. Even Wajid, who seems more technically capable, will have a learning curve — it’ll likely be steeper for her.
-
-We can definitely bring her in for a third-round interview focused more on testing, but if you’re not confident in her technically, I’m not sure how useful that would be in the long run.
