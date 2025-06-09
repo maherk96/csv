@@ -15,69 +15,68 @@ public List<Map<String, String>> extractDataTable(TestStep testStep) {
 
     int columnCount = rows.get(0).size();
 
-    // Case 1: key-value table with headers "key" and "value"
-    if (columnCount == 2 && rows.size() > 1 && "key".equalsIgnoreCase(rows.get(0).get(0)) && "value".equalsIgnoreCase(rows.get(0).get(1))) {
-        Map<String, String> kvMap = new LinkedHashMap<>();
+    // Case 1: key-value table with "key"/"value" headers
+    if (columnCount == 2 &&
+        rows.size() > 1 &&
+        "key".equalsIgnoreCase(rows.get(0).get(0)) &&
+        "value".equalsIgnoreCase(rows.get(0).get(1))) {
+        
+        Map<String, String> map = new LinkedHashMap<>();
         for (int i = 1; i < rows.size(); i++) {
-            kvMap.put(rows.get(i).get(0), rows.get(i).get(1));
+            map.put(rows.get(i).get(0), rows.get(i).get(1));
         }
-        kvMap.put("rowIndex", "0");
-        return List.of(kvMap);
+        map.put("rowIndex", "0");
+        return List.of(map);
     }
 
-    // Case 2: unnamed key-value rows (e.g., quantity | 200)
+    // Case 2: unnamed key-value pairs (2 columns, no headers)
     if (columnCount == 2 && rows.stream().allMatch(row -> row.size() == 2)) {
-        Map<String, String> unnamedMap = new LinkedHashMap<>();
+        Map<String, String> map = new LinkedHashMap<>();
         for (int i = 0; i < rows.size(); i++) {
-            unnamedMap.put(rows.get(i).get(0), rows.get(i).get(1));
+            map.put(rows.get(i).get(0), rows.get(i).get(1));
         }
-        unnamedMap.put("rowIndex", "0");
-        return List.of(unnamedMap);
+        map.put("rowIndex", "0");
+        return List.of(map);
     }
 
-    // Case 3: proper header + data rows
-    if (rows.size() > 1 && columnCount > 1) {
+    // Case 3: header + data rows (ensure at least 2 rows, all same size)
+    boolean hasHeader = rows.size() > 1 &&
+        rows.get(0).size() > 1 &&
+        rows.stream().allMatch(r -> r.size() == columnCount);
+
+    if (hasHeader) {
         List<String> headers = rows.get(0);
-        List<Map<String, String>> result = new ArrayList<>();
-        for (int i = 1; i < rows.size(); i++) {
-            List<String> row = rows.get(i);
-            Map<String, String> rowMap = new LinkedHashMap<>();
-            for (int j = 0; j < row.size(); j++) {
-                rowMap.put(headers.get(j), row.get(j));
+
+        // Quick check: are these likely actual headers or just data? (i.e. NOT numeric/symbolic values)
+        boolean headerLooksValid = headers.stream().noneMatch(s -> s.matches(".*\\d.*") || s.contains("/"));
+
+        if (headerLooksValid) {
+            List<Map<String, String>> result = new ArrayList<>();
+            for (int i = 1; i < rows.size(); i++) {
+                List<String> row = rows.get(i);
+                Map<String, String> map = new LinkedHashMap<>();
+                for (int j = 0; j < row.size(); j++) {
+                    map.put(headers.get(j), row.get(j));
+                }
+                map.put("rowIndex", String.valueOf(i - 1));
+                result.add(map);
             }
-            rowMap.put("rowIndex", String.valueOf(i - 1));
-            result.add(rowMap);
+            return result;
         }
-        return result;
     }
 
-    // Case 4: raw data (multi-column, no headers)
-    if (rows.size() >= 1 && columnCount > 1) {
-        List<Map<String, String>> result = new ArrayList<>();
-        for (int i = 0; i < rows.size(); i++) {
-            List<String> row = rows.get(i);
-            Map<String, String> rowMap = new LinkedHashMap<>();
-            for (int j = 0; j < row.size(); j++) {
-                rowMap.put("col" + j, row.get(j));
-            }
-            rowMap.put("rowIndex", String.valueOf(i));
-            result.add(rowMap);
+    // Case 4: Raw data (no headers)
+    List<Map<String, String>> result = new ArrayList<>();
+    for (int i = 0; i < rows.size(); i++) {
+        List<String> row = rows.get(i);
+        Map<String, String> map = new LinkedHashMap<>();
+        for (int j = 0; j < row.size(); j++) {
+            map.put("col" + j, row.get(j));
         }
-        return result;
+        map.put("rowIndex", String.valueOf(i));
+        result.add(map);
     }
 
-    // Case 5: single-column raw list
-    if (columnCount == 1) {
-        List<Map<String, String>> result = new ArrayList<>();
-        for (int i = 0; i < rows.size(); i++) {
-            Map<String, String> rowMap = new LinkedHashMap<>();
-            rowMap.put("col0", rows.get(i).get(0));
-            rowMap.put("rowIndex", String.valueOf(i));
-            result.add(rowMap);
-        }
-        return result;
-    }
-
-    return Collections.emptyList();
+    return result;
 }
 ```
