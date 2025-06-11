@@ -1,46 +1,99 @@
 ```java
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.Set;
+public class QAPHeader {
+    private final long launchStartTime;
+    private final String launchId;
+    private final String applicationName;
+    private final String testEnvironment;
+    private final String user;
+    private final String gitBranch;
+    private final boolean isRegression;
+    private final long launchEndTime;
+    private final String osVersion;
+    private final String testRunnerVersion;
+    private final String jdkVersion;
 
-public class QAPTestBuilder {
-    private final JunitLaunchBuilder parent;
-    private final QAPTest test;
-
-    public QAPTestBuilder(JunitLaunchBuilder parent, String methodName, String displayName) {
-        this.parent = parent;
-        this.test = new QAPTest(methodName, displayName);
-        this.test.setStartTime(Instant.now().toEpochMilli());
-        this.test.setEndTime(Instant.now().toEpochMilli());
+    private QAPHeader(QAPHeaderBuilder builder) {
+        this.launchStartTime = builder.launchStartTime;
+        this.launchId = builder.launchId;
+        this.applicationName = builder.applicationName;
+        this.testEnvironment = builder.testEnvironment;
+        this.user = builder.user;
+        this.gitBranch = builder.gitBranch;
+        this.isRegression = builder.isRegression;
+        this.launchEndTime = builder.launchEndTime;
+        this.osVersion = builder.osVersion;
+        this.testRunnerVersion = builder.testRunnerVersion;
+        this.jdkVersion = builder.jdkVersion;
     }
 
-    public QAPTestBuilder withStatus(String status) {
-        test.setStatus(status);
-        return this;
+    public static class QAPHeaderBuilder {
+        private final long launchStartTime = System.currentTimeMillis();
+        private final String launchId;
+
+        private String applicationName;
+        private String testEnvironment;
+        private String user;
+        private String gitBranch;
+        private boolean isRegression;
+        private long launchEndTime;
+        private String osVersion;
+        private String testRunnerVersion;
+        private String jdkVersion;
+
+        public QAPHeaderBuilder(String launchId) {
+            this.launchId = launchId;
+        }
+
+        public QAPHeaderBuilder withApplicationName(String applicationName) {
+            this.applicationName = applicationName;
+            return this;
+        }
+
+        public QAPHeaderBuilder withTestEnvironment(String testEnvironment) {
+            this.testEnvironment = testEnvironment;
+            return this;
+        }
+
+        public QAPHeaderBuilder withUser(String user) {
+            this.user = user;
+            return this;
+        }
+
+        public QAPHeaderBuilder withGitBranch(String gitBranch) {
+            this.gitBranch = gitBranch;
+            return this;
+        }
+
+        public QAPHeaderBuilder withIsRegression(boolean isRegression) {
+            this.isRegression = isRegression;
+            return this;
+        }
+
+        public QAPHeaderBuilder withLaunchEndTime(long launchEndTime) {
+            this.launchEndTime = launchEndTime;
+            return this;
+        }
+
+        public QAPHeaderBuilder withOsVersion(String osVersion) {
+            this.osVersion = osVersion;
+            return this;
+        }
+
+        public QAPHeaderBuilder withTestRunnerVersion(String version) {
+            this.testRunnerVersion = version;
+            return this;
+        }
+
+        public QAPHeaderBuilder withJdkVersion(String version) {
+            this.jdkVersion = version;
+            return this;
+        }
+
+        public QAPHeader build() {
+            return new QAPHeader(this);
+        }
     }
 
-    public QAPTestBuilder withParams(String params) {
-        test.setTestParams(params.getBytes(StandardCharsets.UTF_8));
-        return this;
-    }
-
-    public QAPTestBuilder withTags(Set<String> tags) {
-        test.setTag(tags);
-        return this;
-    }
-
-    public QAPTestBuilder withLogs(String logs) {
-        test.setLogs(logs);
-        return this;
-    }
-
-    public QAPTestBuilder withFix(String fix) {
-        test.setFix(fix);
-        return this;
-    }
-
-    public JunitLaunchBuilder done() {
-        return parent.addBuiltTest(test);
-    }
+    // getters only (no setters)
 }
 ```
