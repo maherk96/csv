@@ -1,17 +1,26 @@
 ```java
 private static String buildEnumBlock(String tableName, List<String> columnNames) {
     String enumName = tableName.toUpperCase();
-    String tablePrefix = enumName + "_";
 
-    StringBuilder sb = new StringBuilder();
-    sb.append("    public enum ").append(enumName).append(" {\n");
+    String enumConstants = columnNames.stream()
+        .map(col -> String.format("        %s_%s(\"%s\")", enumName, col.toUpperCase(), col))
+        .collect(Collectors.joining(",\n"));
 
-    String joinedColumns = columnNames.stream()
-        .map(col -> tablePrefix + col.toUpperCase())
-        .collect(Collectors.joining(", "));
+    return """
+            public enum %s implements DatabaseColumn {
+            %s;
 
-    sb.append("        ").append(joinedColumns).append(";\n");
-    sb.append("    }\n");
-    return sb.toString();
+                private final String columnName;
+
+                %s(String columnName) {
+                    this.columnName = columnName;
+                }
+
+                @Override
+                public String columnName() {
+                    return columnName;
+                }
+            }
+            """.formatted(enumName, enumConstants, enumName);
 }
 ```
