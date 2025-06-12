@@ -1,75 +1,40 @@
 ```java
-package com.solace.demo.solace_events_demo;
+import org.yaml.snakeyaml.Yaml;
 
-import com.solace.messaging.MessagingService;
-import com.solace.messaging.config.SolaceProperties;
-import com.solace.messaging.config.profile.ConfigurationProfile;
-import com.solace.messaging.publisher.DirectMessagePublisher;
-import com.solace.messaging.publisher.OutboundMessage;
-import com.solace.messaging.resources.Topic;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+import java.io.InputStream;
 
-import java.util.Properties;
-import java.util.UUID;
+public class SolaceConnectionsConfig {
 
-@Component
-public class EventProducer {
+    private String host;
+    private String topic;
+    private String vpnname;
+    private String username;
+    private String password;
 
-    private static final Logger log = LoggerFactory.getLogger(EventProducer.class);
+    // Getters
+    public String getHost()     { return host; }
+    public String getTopic()    { return topic; }
+    public String getVpnname()  { return vpnname; }
+    public String getUsername() { return username; }
+    public String getPassword() { return password; }
 
-    private MessagingService messagingService;
-    private DirectMessagePublisher publisher;
+    // Static loader
+    public static SolaceConnectionsConfig load() {
+        Yaml yaml = new Yaml();
+        try (InputStream input = SolaceConnectionsConfig.class
+                .getClassLoader()
+                .getResourceAsStream("config.yml")) {
 
-    @Autowired
-    private SolaceConfigProperties config;
+            // loadAs requires a wrapper map since our YAML uses a top-level key
+            var map = yaml.loadAs(input, java.util.Map.class);
+            Object inner = map.get("solaceConnections");
 
-    @PostConstruct
-    public void init() {
-        Properties props = new Properties();
-        props.setProperty(SolaceProperties.TransportLayerProperties.HOST, config.getHostUrl());
-        props.setProperty(SolaceProperties.ServiceProperties.VPN_NAME, config.getVpnName());
-        props.setProperty(SolaceProperties.AuthenticationProperties.SCHEME_BASIC_USER_NAME, config.getUserName());
-        props.setProperty(SolaceProperties.AuthenticationProperties.SCHEME_BASIC_PASSWORD, config.getPassword());
-        props.setProperty(SolaceProperties.TransportLayerProperties.RECONNECTION_ATTEMPTS, config.getReconnectionAttempts());
-        props.setProperty(SolaceProperties.TransportLayerProperties.CONNECTION_RETRIES_PER_HOST, config.getConnectionRetriesPerHost());
+            // convert inner map to SolaceConnectionsConfig
+            return yaml.loadAs(yaml.dump(inner), SolaceConnectionsConfig.class);
 
-        messagingService = MessagingService.builder(ConfigurationProfile.V1)
-                .fromProperties(props)
-                .build()
-                .connect();
-
-        publisher = messagingService.createDirectMessagePublisherBuilder()
-                .build()
-                .start();
-
-        log.info("EventProducer initialized and connected to Solace.");
-    }
-
-    public void publish(String topicName, String payload) {
-        Topic topic = Topic.of(topicName);
-
-        OutboundMessage message = messagingService.messageBuilder()
-                .withProperty("correlationId", UUID.randomUUID().toString())
-                .build(payload.getBytes());
-
-        publisher.publish(message, topic);
-        log.info("Message published to topic: {}", topicName);
-    }
-
-    @PreDestroy
-    public void shutdown() {
-        if (publisher != null) {
-            publisher.terminate(500);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load solaceConnections from YAML", e);
         }
-        if (messagingService != null) {
-            messagingService.disconnect();
-        }
-        log.info("EventProducer shut down.");
     }
 }
 ```
