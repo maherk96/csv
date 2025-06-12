@@ -1,40 +1,72 @@
-```java
-import org.yaml.snakeyaml.Yaml;
+```sql
+BEGIN
+  FOR launch_record IN (
+    SELECT ID FROM QAPORTAL.TEST_LAUNCH WHERE REGRESSION = '0'
+  ) LOOP
+    -- Delete child STEP_RUNs via TEST_RUN
+    DELETE FROM QAPORTAL.TEST_STEP_RUN
+    WHERE TEST_RUN_ID IN (
+      SELECT ID FROM QAPORTAL.TEST_RUN WHERE TEST_LAUNCH_ID = launch_record.ID
+    );
 
-import java.io.InputStream;
+    -- Delete TEST_RUNs
+    DELETE FROM QAPORTAL.TEST_RUN WHERE TEST_LAUNCH_ID = launch_record.ID;
 
-public class SolaceConnectionsConfig {
+    -- Delete TEST_PARAMs
+    DELETE FROM QAPORTAL.TEST_PARAM WHERE TEST_LAUNCH_ID = launch_record.ID;
 
-    private String host;
-    private String topic;
-    private String vpnname;
-    private String username;
-    private String password;
+    -- Delete TEST_TAGs
+    DELETE FROM QAPORTAL.TEST_TAG WHERE TEST_LAUNCH_ID = launch_record.ID;
 
-    // Getters
-    public String getHost()     { return host; }
-    public String getTopic()    { return topic; }
-    public String getVpnname()  { return vpnname; }
-    public String getUsername() { return username; }
-    public String getPassword() { return password; }
+    -- Delete TEST_LAUNCH
+    DELETE FROM QAPORTAL.TEST_LAUNCH WHERE ID = launch_record.ID;
+  END LOOP;
 
-    // Static loader
-    public static SolaceConnectionsConfig load() {
-        Yaml yaml = new Yaml();
-        try (InputStream input = SolaceConnectionsConfig.class
-                .getClassLoader()
-                .getResourceAsStream("config.yml")) {
+  -- Cleanup orphaned FIX
+  DELETE FROM QAPORTAL.FIX
+  WHERE ID NOT IN (
+    SELECT DISTINCT FIX_ID FROM QAPORTAL.TEST_RUN WHERE FIX_ID IS NOT NULL
+    UNION
+    SELECT DISTINCT FIX_ID FROM QAPORTAL.TEST_STEP_RUN WHERE FIX_ID IS NOT NULL
+  );
 
-            // loadAs requires a wrapper map since our YAML uses a top-level key
-            var map = yaml.loadAs(input, java.util.Map.class);
-            Object inner = map.get("solaceConnections");
+  -- Cleanup orphaned LOG
+  DELETE FROM QAPORTAL.LOG
+  WHERE ID NOT IN (
+    SELECT DISTINCT LOG_ID FROM QAPORTAL.TEST_RUN WHERE LOG_ID IS NOT NULL
+    UNION
+    SELECT DISTINCT LOG_ID FROM QAPORTAL.TEST_STEP_RUN WHERE LOG_ID IS NOT NULL
+  );
 
-            // convert inner map to SolaceConnectionsConfig
-            return yaml.loadAs(yaml.dump(inner), SolaceConnectionsConfig.class);
+  -- Cleanup orphaned EXCEPTION
+  DELETE FROM QAPORTAL.EXCEPTION
+  WHERE ID NOT IN (
+    SELECT DISTINCT EXCEPTION_ID FROM QAPORTAL.TEST_RUN WHERE EXCEPTION_ID IS NOT NULL
+    UNION
+    SELECT DISTINCT EXCEPTION_ID FROM QAPORTAL.TEST_STEP_RUN WHERE EXCEPTION_ID IS NOT NULL
+  );
 
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load solaceConnections from YAML", e);
-        }
-    }
-}
+  -- Cleanup orphaned TESTs
+  DELETE FROM QAPORTAL.TEST
+  WHERE ID NOT IN (
+    SELECT DISTINCT TEST_ID FROM QAPORTAL.TEST_RUN WHERE TEST_ID IS NOT NULL
+    UNION
+    SELECT DISTINCT TEST_ID FROM QAPORTAL.TEST_PARAM WHERE TEST_ID IS NOT NULL
+    UNION
+    SELECT DISTINCT TEST_ID FROM QAPORTAL.TEST_TAG WHERE TEST_ID IS NOT NULL
+  );
+
+  -- Cleanup orphaned TEST_CLASSES
+  DELETE FROM QAPORTAL.TEST_CLASS
+  WHERE ID NOT IN (
+    SELECT DISTINCT TEST_CLASS_ID FROM QAPORTAL.TEST WHERE TEST_CLASS_ID IS NOT NULL
+  );
+
+  -- Cleanup orphaned TEST_FEATURE
+  DELETE FROM QAPORTAL.TEST_FEATURE
+  WHERE ID NOT IN (
+    SELECT DISTINCT TEST_FEATURE_ID FROM QAPORTAL.TEST WHERE TEST_FEATURE_ID IS NOT NULL
+  );
+
+END;
 ```
