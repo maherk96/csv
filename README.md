@@ -1,24 +1,68 @@
 ```java
 
-String launchId = "TestLaunch_75999d5b-bbd6-483d-b61b-...";
+public static class ResultRow {
+    private final Map<String, Object> data;
 
-databaseClient
-    .runQuery("SELECT * FROM TEST_LAUNCH WHERE LAUNCH_ID = ?")
-    .withParams(launchId)
-    .expectSingleRow(row -> {
-        Assertions.assertEquals("main", row.getString("GIT_BRANCH"));
-        Assertions.assertEquals("1.0.0", row.getString("TEST_RUNNER_VERSION"));
-        Assertions.assertEquals(1, row.getInt("TOTAL"));
-        Assertions.assertEquals(1, row.getInt("PASSED"));
-        Assertions.assertEquals("17", row.getString("JDK_VERSION"));
-        Assertions.assertEquals("Linux 5.4", row.getString("OS_VERSION"));
-        Assertions.assertEquals("1", row.getString("REGRESSION"));
-        Assertions.assertEquals(16002L, row.getLong("APP_ID"));
-        Assertions.assertEquals(30152L, row.getLong("TEST_CLASS_ID"));
-        Assertions.assertEquals(20152L, row.getLong("USER_ID"));
+    public ResultRow(Map<String, Object> data) {
+        this.data = data;
+    }
 
-        // Optional: assert timestamps are not null
-        Assertions.assertNotNull(row.get("START_TIME"));
-        Assertions.assertNotNull(row.get("END_TIME"));
-    });
+    public String getString(String column) {
+        return (String) data.get(column);
+    }
+
+    public Long getLong(String column) {
+        Object val = data.get(column);
+        return val instanceof Number ? ((Number) val).longValue() : null;
+    }
+
+    public Integer getInt(String column) {
+        Object val = data.get(column);
+        return val instanceof Number ? ((Number) val).intValue() : null;
+    }
+
+    public Object get(String column) {
+        return data.get(column);
+    }
+
+    public Map<String, Object> asMap() {
+        return data;
+    }
+
+    public ResultRow expect(String column, Object expectedValue) {
+        Object actual = data.get(column);
+        Assertions.assertEquals(expectedValue, actual,
+            "Expected column [" + column + "] to be [" + expectedValue + "] but was [" + actual + "]");
+        return this;
+    }
+
+    public ResultRow expect(String column, Object expectedValue, String message) {
+        Assertions.assertEquals(expectedValue, data.get(column), message);
+        return this;
+    }
+
+    public ResultRow expectNotNull(String column) {
+        Object actual = data.get(column);
+        Assertions.assertNotNull(actual, "Expected column [" + column + "] to be non-null");
+        return this;
+    }
+
+    public ResultRow expectNull(String column) {
+        Object actual = data.get(column);
+        Assertions.assertNull(actual, "Expected column [" + column + "] to be null but was [" + actual + "]");
+        return this;
+    }
+
+    public ResultRow expectMatches(String column, java.util.function.Predicate<Object> condition, String failureMessage) {
+        Object actual = data.get(column);
+        Assertions.assertTrue(condition.test(actual),
+            "Expected column [" + column + "] to match condition, but it failed. " + failureMessage + " (was: " + actual + ")");
+        return this;
+    }
+
+    @Override
+    public String toString() {
+        return data.toString();
+    }
+}
 ```
