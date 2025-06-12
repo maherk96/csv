@@ -9,5 +9,5 @@ FROM all_cons_columns a
 JOIN all_constraints c ON a.owner = c.owner AND a.constraint_name = c.constraint_name
 JOIN all_constraints c_pk ON c.r_constraint_name = c_pk.constraint_name
 WHERE c.constraint_type = 'R'
-  AND c.constraint_name = 'FKAINY9YA75J7S0EXNK7YVOQS4H';
+  AND c.constraint_name = UPPER('FKAINY9YA75J5OEXNK7YVOQS4H');
 ```
