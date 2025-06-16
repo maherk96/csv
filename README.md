@@ -1,25 +1,12 @@
-```text
-        +--------+
-        | Client |  <------------------------------------+
-        +--------+                                       |
-            |                                            |
-            v                                            |
-       +---------+                                       |
-       |  Wait   |                                       |
-       +---------+                                       |
-        /      \                                         |
-       /        \                                        |
-      v          v                                       |
-+---------+   +--------+                                 |
-| Verify  |   | Client | <-----------------------------+ |
-+---------+   +--------+                               | |
-     |                                             +---+ |
-     +--------------------------------------------->-----+
+```xml
+    <!-- Show the SQL queries -->
+    <Logger name="org.hibernate.SQL" level="debug" additivity="false">
+        <AppenderRef ref="Console"/>
+    </Logger>
 
-	•	Client: Any messaging interface (Solace, Kafka, REST, QuickFix, etc.)
-	•	Wait: A “wait factory” that allows fluent chaining (e.g., client.wait().verify())
-	•	Verify: A verification step to validate received messages
-	•	Each node allows transitioning back to another — e.g., verify().client(), wait().verify(), or verify().wait().
+    <!-- Show the parameters bound to queries -->
+    <Logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="trace" additivity="false">
+        <AppenderRef ref="Console"/>
+    </Logger>
 
-This flow captures your key idea: fluent interaction, looping back between steps, and modular validation of client actions. Let me know if you want a variation showing specific message types or client protocols.
 ```
