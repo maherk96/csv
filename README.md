@@ -1,65 +1,87 @@
 ```java
-public int parseNext(DirectBuffer buffer) {
-    final var len = buffer.capacity();
-    log.debug("Received buffer: len={}, content='{}'", len, buffer.getStringWithoutLengthAscii(0, len));
+@Override
+public boolean requestIsBelowLimits(
+        CreditCheckRequest creditCheckRequest,
+        CreditParams creditParams,
+        EarmarkTracker<CreditCheckRequest> earmarkTracker) {
 
-    if (len < 5) {
-        log.warn("Incomplete buffer: too short to contain valid message length.");
-        return 0;
+    final AtomicBoolean isBelowLimit = new AtomicBoolean(true);
+    final String clientId = creditCheckRequest.getKlNumber() != null ?
+            creditCheckRequest.getKlNumber() : creditCheckRequest.getBaseNumber();
+
+    log.debug("[LimitCheck] Starting check for clientId: {}", clientId);
+
+    if (creditParams == null) {
+        log.warn("[LimitCheck] No credit params provided, skipping limit check.");
+        return true;
     }
 
-    try {
-        int index = 0;
-
-        // Prepend
-        final var prepend = ParsingUtil.getCharFromBuffer(buffer, index);
-        index += NUM_BYTES_CHAR;
-        log.debug("Parsed prepend: '{}'", prepend);
-
-        // Total message length
-        final var totalLen = ParsingUtil.getIntFromBuffer(buffer, index);
-        index += NUM_BYTES_INT;
-        log.debug("Parsed total length: {}", totalLen);
-
-        if (len < totalLen) {
-            log.warn("Incomplete buffer: expected length={}, actual={}", totalLen, len);
-            return 0;
-        }
-
-        // Header length
-        final var headerLen = ParsingUtil.getIntFromBuffer(buffer, index);
-        index += NUM_BYTES_INT;
-        log.debug("Parsed header length: {}", headerLen);
-
-        // Header
-        final var header = ParsingUtil.getStringFromBuffer(buffer, index, headerLen);
-        index += header.getBytes().length;
-        log.debug("Parsed header: {}", header);
-
-        // Body length
-        final var bodyLen = ParsingUtil.getIntFromBuffer(buffer, index);
-        index += NUM_BYTES_INT;
-        log.debug("Parsed body length: {}", bodyLen);
-
-        // Body
-        final var body = ParsingUtil.getStringFromBuffer(buffer, index, bodyLen);
-        log.debug("Parsed body: {}", body);
-
-        try {
-            var creditCheckRequest = creditCheckRequestFactory.createCreditCheckRequest(body);
-            creditCheckRequest.setHeader(header);
-            creditCheckRequestListener.onCreditCheckRequest(creditCheckRequest);
-        } catch (JsonProcessingException e) {
-            log.error("Failed to parse credit check body: '{}'", body, e);
-        }
-
-    } catch (IndexOutOfBoundsException e) {
-        log.error("Failed to parse credit check buffer (len={}): '{}'", len, buffer.getStringWithoutLengthUtf8(0, len), e);
-        return 0;
+    if (!shouldCheckLimit(creditCheckRequest)) {
+        log.debug("[LimitCheck] Request type does not require limit check. Skipping.");
+        return true;
     }
 
-    return 1;
+    Map<String, BigDecimal> boughtAmounts = new HashMap<>();
+    Map<String, BigDecimal> soldAmounts = new HashMap<>();
+    double[] calculatedCurrencyAmount = {0};
+    String calculatedCurrency = "USD";
+
+    creditCheckRequest.getDeals().forEach(deal -> {
+        String boughtCurrency = deal.getBoughtCurrency();
+        BigDecimal boughtAmount = deal.getBoughtAmount();
+        String soldCurrency = deal.getSoldCurrency();
+        BigDecimal soldAmount = deal.getSoldAmount();
+        double usdAmount = deal.getUsdDollarAmt();
+
+        boughtAmounts.merge(boughtCurrency, boughtAmount, BigDecimal::add);
+        soldAmounts.merge(soldCurrency, soldAmount, BigDecimal::add);
+        calculatedCurrencyAmount[0] += usdAmount;
+    });
+
+    log.debug("[LimitCheck] Aggregated bought amounts: {}", boughtAmounts);
+    log.debug("[LimitCheck] Aggregated sold amounts: {}", soldAmounts);
+    log.debug("[LimitCheck] Total USD exposure: {}", calculatedCurrencyAmount[0]);
+
+    boughtAmounts.forEach((currency, amount) -> {
+        BigDecimal limit = creditParams.getLimit(currency);
+        BigDecimal earmarked = earmarkTracker.getBoughtAmount(clientId, currency);
+        BigDecimal remaining = limit.subtract(earmarked);
+
+        log.debug("[LimitCheck] Bought: currency={}, limit={}, earmarked={}, remaining={}, requested={}",
+                currency, limit, earmarked, remaining, amount);
+
+        if (remaining.compareTo(amount) < 0) {
+            isBelowLimit.set(false);
+            log.warn("[LimitCheck] Bought amount exceeds limit for currency: {}", currency);
+        }
+    });
+
+    soldAmounts.forEach((currency, amount) -> {
+        BigDecimal limit = creditParams.getLimit(currency);
+        BigDecimal earmarked = earmarkTracker.getSoldAmount(clientId, currency);
+        BigDecimal remaining = limit.subtract(earmarked);
+
+        log.debug("[LimitCheck] Sold: currency={}, limit={}, earmarked={}, remaining={}, requested={}",
+                currency, limit, earmarked, remaining, amount);
+
+        if (remaining.compareTo(amount) < 0) {
+            isBelowLimit.set(false);
+            log.warn("[LimitCheck] Sold amount exceeds limit for currency: {}", currency);
+        }
+    });
+
+    BigDecimal totalLimit = creditParams.getLimit(calculatedCurrency);
+    BigDecimal earmarkedTotal = earmarkTracker.getCalculatedCcyAmount(clientId);
+    BigDecimal remainingTotal = totalLimit.subtract(earmarkedTotal);
+
+    log.debug("[LimitCheck] Total exposure: limit={}, earmarked={}, remaining={}, requested={}",
+            totalLimit, earmarkedTotal, remainingTotal, calculatedCurrencyAmount[0]);
+
+    if (remainingTotal.doubleValue() < calculatedCurrencyAmount[0]) {
+        isBelowLimit.set(false);
+        log.warn("[LimitCheck] Total exposure exceeds limit for calculated currency ({}).", calculatedCurrency);
+    }
+
+    return isBelowLimit.get();
 }
-
-
 ```
